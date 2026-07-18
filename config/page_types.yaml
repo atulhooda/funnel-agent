@@ -1,0 +1,43 @@
+# page_types.yaml — config-driven page-type -> funnel lean mapping (Layers 1 & 2).
+#
+# Layer 1 resolves each tracked URL to a page_type at ingest; Layer 2 uses the
+# same leans to weight features. First matching rule wins. `match_any` tokens
+# are matched against the URL path (lowercased); the token "/" matches only the
+# exact root path. Edit freely — no page logic is hardcoded in Python.
+
+version: 1
+default_page_type: other
+default_lean: TOFU
+
+rules:
+  - page_type: pricing
+    lean: BOFU
+    match_any: ["/pricing", "/plans", "/quote"]
+
+  - page_type: checkout
+    lean: BOFU
+    match_any: ["/checkout", "/cart", "/signup", "/trial", "/get-started", "/demo", "/contact-sales"]
+
+  - page_type: comparison
+    lean: MOFU
+    match_any: ["/compare", "/vs", "/alternatives"]
+
+  - page_type: testimonials
+    lean: MOFU
+    match_any: ["/testimonials", "/case-study", "/case-studies", "/customers", "/reviews"]
+
+  - page_type: faq
+    lean: MOFU
+    match_any: ["/faq", "/questions", "/support"]
+
+  - page_type: features
+    lean: MOFU
+    match_any: ["/features", "/product", "/how-it-works", "/integrations"]
+
+  - page_type: blog
+    lean: TOFU
+    match_any: ["/blog", "/article", "/guide", "/resources", "/learn"]
+
+  - page_type: home
+    lean: TOFU
+    match_any: ["/"]

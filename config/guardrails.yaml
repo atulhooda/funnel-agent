@@ -1,0 +1,39 @@
+# guardrails.yaml — decision guardrail parameters (Layer 3).
+#
+# Read by decision/guardrails.py, which validates EVERY decision before it is
+# accepted. No guardrail logic is hardcoded in Python — thresholds live here.
+
+version: 1
+
+# Timezone used to evaluate the send window against a decision's send_at.
+timezone: UTC
+
+allowed_actions: [send_email, send_whatsapp, wait, handoff_human]
+outreach_actions: [send_email, send_whatsapp]   # actions that count toward the rate limit
+
+# Max outreach actions accepted per lead within a rolling window.
+rate_limit:
+  max_outreach: 2
+  window_days: 7
+
+# Sends may only be scheduled within [start_hour, end_hour) local time.
+send_window:
+  start_hour: 9
+  end_hour: 21
+
+# Which channel each send action must target.
+action_channels:
+  send_email: email
+  send_whatsapp: whatsapp
+
+# Consent flag (a leads column) required for each channel.
+channel_consent:
+  email: email_opt_in
+  whatsapp: whatsapp_opt_in
+
+# Required decision fields per action (action + reasoning are always required).
+required_fields:
+  send_email: [channel, message, send_at]
+  send_whatsapp: [channel, message, send_at]
+  wait: [send_at]
+  handoff_human: []

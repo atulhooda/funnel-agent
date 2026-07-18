@@ -1,0 +1,34 @@
+# templates.yaml — suggested message copy per funnel stage / channel (Layer 3).
+#
+# The decision engine is shown the template(s) for the lead's stage and returns a
+# final, personalized `message`. Copy lives here, never in prompts or code.
+# Placeholders like {topic}/{objection} are filled by the model from persona/behavior.
+
+version: 1
+
+email:
+  TOFU: |
+    Subject: A quick read on {topic}
+
+    Hi there — thanks for checking out our guide. If you're exploring {topic},
+    here are two more resources our readers found useful. No pressure — just
+    helpful reading when you have a minute.
+  MOFU: |
+    Subject: Comparing your options?
+
+    Hi — looks like you've been weighing things up. Here's an honest side-by-side
+    of how we compare, plus answers to the questions buyers ask most. Happy to
+    point you to a customer in your space if that helps.
+  BOFU: |
+    Subject: Ready when you are
+
+    Hi — you were close to getting started. If {objection} is the sticking point,
+    I can help sort it out. Want me to set you up, or answer any last questions?
+
+whatsapp:
+  MOFU: |
+    Hi! Saw you were comparing options — want a 2-line summary of how we stack up
+    against the alternative you were looking at?
+  BOFU: |
+    Hi! You were mid-signup earlier — anything I can help with to get you across
+    the line? Happy to walk you through it.

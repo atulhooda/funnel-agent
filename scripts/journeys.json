@@ -1,0 +1,130 @@
+{
+  "_readme": "Seeded visitor journeys for scripts/replay.py. Add/edit freely. Each event's `minutes_ago` is how long before replay time it occurred (larger = older). Only journey (c) identifies; (a) and (b) stay anonymous by design. event_type is free-form (page_view, checkout_start, checkout_abandon, ...). url is classified into a page_type via config/page_types.yaml.",
+
+  "journeys": [
+    {
+      "key": "tofu_browser",
+      "label": "(a) TOFU browser — reads one blog post, then leaves",
+      "anonymous_id": "anon-tofu-01",
+      "events": [
+        {
+          "minutes_ago": 2880,
+          "session_id": "s-tofu-01",
+          "event_type": "page_view",
+          "url": "https://acme.test/blog/what-is-a-behavioral-funnel",
+          "metadata": {"referrer": "google", "utm_source": "organic", "device": "mobile"}
+        }
+      ],
+      "identify": null
+    },
+
+    {
+      "key": "mofu_comparer",
+      "label": "(b) MOFU comparer — several visits; testimonials + FAQ + comparison",
+      "anonymous_id": "anon-mofu-01",
+      "events": [
+        {
+          "minutes_ago": 7200,
+          "session_id": "s-mofu-01",
+          "event_type": "page_view",
+          "url": "https://acme.test/blog/funnel-strategy-guide",
+          "metadata": {"referrer": "google", "utm_source": "organic", "device": "desktop"}
+        },
+        {
+          "minutes_ago": 7185,
+          "session_id": "s-mofu-01",
+          "event_type": "page_view",
+          "url": "https://acme.test/features",
+          "metadata": {"device": "desktop"}
+        },
+        {
+          "minutes_ago": 4320,
+          "session_id": "s-mofu-02",
+          "event_type": "page_view",
+          "url": "https://acme.test/testimonials",
+          "metadata": {"referrer": "direct", "device": "desktop"}
+        },
+        {
+          "minutes_ago": 4308,
+          "session_id": "s-mofu-02",
+          "event_type": "page_view",
+          "url": "https://acme.test/faq",
+          "metadata": {"device": "desktop"}
+        },
+        {
+          "minutes_ago": 1440,
+          "session_id": "s-mofu-03",
+          "event_type": "page_view",
+          "url": "https://acme.test/compare/acme-vs-rival",
+          "metadata": {"referrer": "direct", "device": "desktop"}
+        },
+        {
+          "minutes_ago": 1432,
+          "session_id": "s-mofu-03",
+          "event_type": "page_view",
+          "url": "https://acme.test/testimonials",
+          "metadata": {"device": "desktop"}
+        },
+        {
+          "minutes_ago": 180,
+          "session_id": "s-mofu-04",
+          "event_type": "page_view",
+          "url": "https://acme.test/faq",
+          "metadata": {"referrer": "direct", "device": "mobile"}
+        }
+      ],
+      "identify": null
+    },
+
+    {
+      "key": "bofu_lead",
+      "label": "(c) BOFU lead — pricing x2, checkout start, abandon, then identifies",
+      "anonymous_id": "anon-bofu-01",
+      "events": [
+        {
+          "minutes_ago": 240,
+          "session_id": "s-bofu-01",
+          "event_type": "page_view",
+          "url": "https://acme.test/features",
+          "metadata": {"referrer": "google", "utm_source": "cpc", "utm_campaign": "brand", "device": "desktop"}
+        },
+        {
+          "minutes_ago": 235,
+          "session_id": "s-bofu-01",
+          "event_type": "page_view",
+          "url": "https://acme.test/pricing",
+          "metadata": {"device": "desktop"}
+        },
+        {
+          "minutes_ago": 60,
+          "session_id": "s-bofu-02",
+          "event_type": "page_view",
+          "url": "https://acme.test/pricing",
+          "metadata": {"referrer": "direct", "device": "desktop"}
+        },
+        {
+          "minutes_ago": 57,
+          "session_id": "s-bofu-02",
+          "event_type": "checkout_start",
+          "url": "https://acme.test/checkout",
+          "metadata": {"plan": "pro", "seats": 3, "device": "desktop"}
+        },
+        {
+          "minutes_ago": 54,
+          "session_id": "s-bofu-02",
+          "event_type": "checkout_abandon",
+          "url": "https://acme.test/checkout",
+          "metadata": {"reason": "left_page", "step": "payment", "device": "desktop"}
+        }
+      ],
+      "identify": {
+        "minutes_ago": 45,
+        "email": "jordan.lee@example.com",
+        "phone": "+14155550123",
+        "email_opt_in": true,
+        "whatsapp_opt_in": true,
+        "consent_source": "exit_intent_form"
+      }
+    }
+  ]
+}

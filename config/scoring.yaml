@@ -1,0 +1,26 @@
+# scoring.yaml — Stage A feature knobs + Stage B call params (Layer 2).
+#
+# Read by scoring/features.py (Stage A) and scoring/classifier.py (Stage B).
+# No scoring logic is hardcoded in Python — thresholds and vocab live here.
+
+version: 1
+
+# Vocabulary the Stage B model must classify into (also used to validate output).
+funnel_stages: [TOFU, MOFU, BOFU]
+
+# --- Stage A (deterministic features) ---
+# How many most-recent events to hand the model as raw context.
+recent_events_limit: 20
+# Event types treated as high-intent signals (surfaced as their own feature).
+high_intent_events:
+  - checkout_start
+  - checkout_abandon
+  - add_to_cart
+  - demo_request
+  - contact_sales
+
+# --- Stage B (Gemini classification) ---
+stage_b:
+  max_tokens: 1024
+  # Retries on malformed/invalid JSON before the lead is flagged (spec: retry once).
+  retries: 1

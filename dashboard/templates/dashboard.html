@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Funnel Agent — Dashboard</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1115; color: #e6e8eb;
+    }
+    h1 { font-size: 20px; margin: 0 0 2px; }
+    h2 { font-size: 15px; margin: 28px 0 10px; color: #b9c0c9; text-transform: uppercase; letter-spacing: .04em; }
+    .sub { color: #8b93a1; font-size: 12px; margin-bottom: 18px; }
+    .cards { display: flex; flex-wrap: wrap; gap: 12px; }
+    .card { background: #171a21; border: 1px solid #262b34; border-radius: 10px; padding: 12px 16px; min-width: 120px; }
+    .card .n { font-size: 22px; font-weight: 600; }
+    .card .l { color: #8b93a1; font-size: 12px; }
+    .wrap { overflow-x: auto; border: 1px solid #262b34; border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #20242c; vertical-align: top; }
+    th { background: #14171d; color: #9aa3b0; font-weight: 600; position: sticky; top: 0; }
+    tr:last-child td { border-bottom: none; }
+    td.reason { max-width: 420px; color: #c7cdd6; }
+    td.msg { max-width: 340px; color: #c7cdd6; }
+    .muted { color: #6b7280; }
+    .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid transparent; }
+    .b-tofu { background:#1f2937; color:#9aa3b0; }
+    .b-mofu { background:#3a2e12; color:#f0c060; }
+    .b-bofu { background:#123020; color:#5fd598; }
+    .b-ok   { background:#123020; color:#5fd598; }
+    .b-bad  { background:#3a1620; color:#f08a9a; }
+    .b-warn { background:#3a2e12; color:#f0c060; }
+    .b-flat { background:#1f2937; color:#9aa3b0; }
+    .chip { display:inline-block; background:#20242c; color:#c7cdd6; border-radius:6px; padding:1px 6px; margin:1px 3px 1px 0; font-size:11px; }
+    .chip.v { background:#3a1620; color:#f08a9a; }
+    button { background:#232833; color:#e6e8eb; border:1px solid #333a45; border-radius:8px; padding:6px 12px; cursor:pointer; font-size:13px; }
+    button:hover { background:#2b313d; }
+    .err { color:#f08a9a; }
+    a { color:#7aa2f7; }
+  </style>
+</head>
+<body>
+  <h1>Behavioral Funnel Agent — Dashboard</h1>
+  <div class="sub">Read-only. All sends are stubbed (logged, never transmitted).
+    &nbsp;·&nbsp; <button onclick="loadAll()">Refresh</button></div>
+
+  <div id="overview" class="cards"></div>
+
+  <h2>Leads</h2>
+  <div class="wrap"><table id="leads"><thead><tr>
+    <th>#</th><th>Lead</th><th>Stage</th><th>Intent</th><th>Consent</th>
+    <th>Objections</th><th>Persona</th><th>Scored</th>
+  </tr></thead><tbody></tbody></table></div>
+
+  <h2>Decision log</h2>
+  <div class="wrap"><table id="decisions"><thead><tr>
+    <th>#</th><th>Lead</th><th>Action</th><th>Status</th><th>Channel</th>
+    <th>Send at</th><th>Reasoning</th><th>Guardrails</th>
+  </tr></thead><tbody></tbody></table></div>
+
+  <h2>Sent messages (stubbed)</h2>
+  <div class="wrap"><table id="sent"><thead><tr>
+    <th>#</th><th>Lead</th><th>Channel</th><th>Sender</th><th>To</th>
+    <th>Status</th><th>Message / skip reason</th>
+  </tr></thead><tbody></tbody></table></div>
+
+  <script>
+    const esc = s => (s == null ? "" : String(s)).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+    const ts = s => s ? esc(s).slice(0, 16).replace("T", " ") : "";
+    const stageBadge = s => s ? `<span class="badge b-${s.toLowerCase()}">${esc(s)}</span>` : '<span class="muted">unscored</span>';
+    const yn = v => v ? '<span class="badge b-ok">yes</span>' : '<span class="badge b-flat">no</span>';
+    const statusBadge = s => `<span class="badge ${s==="accepted"||s==="sent"?"b-ok":s==="rejected"?"b-bad":"b-warn"}">${esc(s)}</span>`;
+
+    function intent(v) {
+      if (v == null) return '<span class="muted">—</span>';
+      const w = Math.max(2, Math.min(100, v));
+      const col = v >= 67 ? "#5fd598" : v >= 34 ? "#f0c060" : "#6b7280";
+      return `${v} <span style="display:inline-block;width:60px;height:6px;background:#20242c;border-radius:3px;vertical-align:middle;margin-left:4px">
+        <span style="display:block;width:${w}%;height:100%;background:${col};border-radius:3px"></span></span>`;
+    }
+    const obj = a => (a && a.length) ? a.map(o => `<span class="chip">${esc(o)}</span>`).join("") : '<span class="muted">—</span>';
+    const persona = o => (o && Object.keys(o).length) ? Object.entries(o).map(([k, v]) => `<span class="chip">${esc(k)}: ${esc(v)}</span>`).join("") : '<span class="muted">—</span>';
+    const violations = g => {
+      if (!g) return "";
+      if (g.passed) return '<span class="badge b-ok">passed</span>';
+      return (g.violations || []).map(v => `<span class="chip v">${esc(v)}</span>`).join("");
+    };
+
+    async function get(path) { const r = await fetch(path); if (!r.ok) throw new Error(path + " -> " + r.status); return r.json(); }
+    const body = id => document.querySelector("#" + id + " tbody");
+
+    async function loadAll() {
+      try {
+        const [L, D, S] = await Promise.all([get("/api/leads"), get("/api/decisions"), get("/api/sent-messages")]);
+        renderLeads(L.leads); renderDecisions(D.decisions); renderSent(S.sent_messages); renderOverview(L.leads, D.decisions, S.sent_messages);
+      } catch (e) {
+        document.getElementById("overview").innerHTML = `<div class="card err">Error loading data: ${esc(e.message)}<br><span class="l">Is the app running and the DB reachable?</span></div>`;
+      }
+    }
+
+    function renderOverview(leads, decisions, sent) {
+      const stages = { TOFU: 0, MOFU: 0, BOFU: 0 };
+      leads.forEach(l => { if (l.funnel_stage in stages) stages[l.funnel_stage]++; });
+      const acc = decisions.filter(d => d.status === "accepted").length;
+      const rej = decisions.filter(d => d.status === "rejected").length;
+      const snt = sent.filter(s => s.status === "sent").length;
+      const skp = sent.filter(s => s.status === "skipped").length;
+      const card = (n, l) => `<div class="card"><div class="n">${n}</div><div class="l">${l}</div></div>`;
+      document.getElementById("overview").innerHTML =
+        card(leads.length, "leads") +
+        card(`${stages.TOFU}/${stages.MOFU}/${stages.BOFU}`, "TOFU / MOFU / BOFU") +
+        card(`${acc}/${rej}`, "decisions acc / rej") +
+        card(`${snt}/${skp}`, "sent / skipped");
+    }
+
+    function renderLeads(rows) {
+      body("leads").innerHTML = rows.map(l => `<tr>
+        <td class="muted">${l.id}</td>
+        <td>${l.email ? esc(l.email) : '<span class="muted">(anonymous)</span>'}${l.scoring_error ? ' <span class="err" title="'+esc(l.scoring_error)+'">⚠ flagged</span>' : ''}</td>
+        <td>${stageBadge(l.funnel_stage)}</td>
+        <td>${intent(l.intent_score)}</td>
+        <td>email ${yn(l.email_opt_in)} &nbsp; wa ${yn(l.whatsapp_opt_in)}</td>
+        <td>${obj(l.likely_objections)}</td>
+        <td>${persona(l.persona_signals)}</td>
+        <td class="muted">${ts(l.scored_at)}</td>
+      </tr>`).join("") || emptyRow(8);
+    }
+
+    function renderDecisions(rows) {
+      body("decisions").innerHTML = rows.map(d => `<tr>
+        <td class="muted">${d.id}</td>
+        <td>${d.lead_email ? esc(d.lead_email) : '<span class="muted">#'+d.lead_id+'</span>'}</td>
+        <td><span class="badge b-flat">${esc(d.action)}</span></td>
+        <td>${statusBadge(d.status)}</td>
+        <td>${d.channel ? esc(d.channel) : '<span class="muted">—</span>'}</td>
+        <td class="muted">${ts(d.send_at)}</td>
+        <td class="reason">${esc(d.reasoning)}</td>
+        <td>${violations(d.guardrail_result)}</td>
+      </tr>`).join("") || emptyRow(8);
+    }
+
+    function renderSent(rows) {
+      body("sent").innerHTML = rows.map(s => `<tr>
+        <td class="muted">${s.id}</td>
+        <td>${s.lead_email ? esc(s.lead_email) : '<span class="muted">#'+s.lead_id+'</span>'}</td>
+        <td>${esc(s.channel)}</td>
+        <td class="muted">${esc(s.sender_type)}</td>
+        <td>${s.to_address ? esc(s.to_address) : '<span class="muted">—</span>'}</td>
+        <td>${statusBadge(s.status)}</td>
+        <td class="msg">${s.status === "skipped" ? '<span class="err">'+esc(s.skip_reason)+'</span>' : esc(s.message)}</td>
+      </tr>`).join("") || emptyRow(7);
+    }
+
+    const emptyRow = n => `<tr><td class="muted" colspan="${n}">No rows yet — run replay.py → score.py → decide.py → execute.py.</td></tr>`;
+
+    loadAll();
+  </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# decision.yaml — decision-engine (Stage: Gemini) call params (Layer 3).
+# Guardrail params live in guardrails.yaml; message copy in templates.yaml.
+
+version: 1
+
+engine:
+  max_tokens: 2048          # room for a full message + reasoning
+  retries: 1                # retry once on malformed JSON, then fall back to handoff_human
