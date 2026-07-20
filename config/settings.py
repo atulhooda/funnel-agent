@@ -24,6 +24,20 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     app_port: int = 8000
 
+    # Going live: browser ingestion + safety
+    track_write_key: str = ""            # if set, /track & /identify require header X-Write-Key
+    cors_allow_origins: str = "*"        # comma-separated site origins allowed to POST from the browser
+    execution_mode: str = "shadow"       # "shadow" = always stub sends; "live" = use real senders
+
+    # Meta WhatsApp Cloud API — real WhatsApp sender (used only when EXECUTION_MODE=live)
+    meta_wa_access_token: str = ""            # System User permanent token (whatsapp_business_messaging)
+    meta_wa_phone_number_id: str = ""         # the WABA phone number ID (not the phone number)
+    meta_wa_api_version: str = "v21.0"
+    meta_wa_message_type: str = "text"        # "text" (only inside 24h window) or "template" (business-initiated)
+    meta_wa_template_name: str = ""           # required when message_type=template
+    meta_wa_template_lang: str = "en_US"
+    meta_wa_template_body_param: bool = True   # False for zero-variable templates (e.g. hello_world)
+
 
 @lru_cache
 def get_settings() -> Settings:

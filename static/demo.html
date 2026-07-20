@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Demo site · Funnel tracking</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #16181d; background: #f6f7f9; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 32px 22px 60px; }
+    .note { background: #eef4ff; border: 1px solid #cfe0fb; color: #234; border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+    .note b { color: #1c5cab; }
+    h1 { font-size: 30px; margin: 26px 0 6px; letter-spacing: -0.02em; }
+    .sub { color: #5b606b; margin: 0 0 22px; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 8px; }
+    button, .btn { font: inherit; font-weight: 600; cursor: pointer; border-radius: 9px; padding: 9px 15px; border: 1px solid #d5d9e0; background: #fff; color: #16181d; }
+    button:hover { background: #f0f2f5; }
+    .primary { background: #2a78d6; border-color: #2a78d6; color: #fff; }
+    .primary:hover { background: #256abf; }
+    .card { background: #fff; border: 1px solid #e6e8ec; border-radius: 12px; padding: 18px 20px; margin-top: 22px; }
+    .card h2 { margin: 0 0 12px; font-size: 16px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
+    input[type=text], input[type=email] { width: 100%; padding: 9px 11px; border: 1px solid #d5d9e0; border-radius: 8px; font: inherit; }
+    .check { display: flex; align-items: center; gap: 8px; font-weight: 500; margin-top: 10px; }
+    #log { margin-top: 22px; }
+    #log .l { font: 12px/1.5 ui-monospace, Menlo, monospace; background: #101317; color: #cfe0d6; border-radius: 8px; padding: 3px 10px; margin-top: 4px; word-break: break-all; }
+    .muted { color: #8a8f98; font-size: 13px; }
+    a { color: #2a78d6; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="note">
+    <b>Demo page</b> for the tracking snippet. It loads <code>/track.js</code> and posts real events to this app's
+    <code>/track</code> &amp; <code>/identify</code>. Open the <a href="/dashboard" target="_blank">dashboard</a> in another
+    tab, click around here, then hit <b>Refresh</b> there to watch this visitor flow through scoring → decision.
+  </div>
+
+  <h1>Grow your pipeline on autopilot.</h1>
+  <p class="sub">A demo landing page. Every button below fires a real behavioral event.</p>
+
+  <div class="row">
+    <button onclick="visit('/services','page_view')">View services</button>
+    <button onclick="visit('/pricing','page_view')">View pricing</button>
+    <button onclick="visit('/blog/getting-started','page_view')">Read a blog post</button>
+    <button class="primary" data-fa-event="cta_click" data-fa-id="hero-book">Book a call</button>
+    <button onclick="visit('/checkout','checkout_start',{plan:'pro'})">Start checkout</button>
+  </div>
+  <p class="muted">A page view also fires automatically on load (this page = <code>/demo</code>). “Book a call” is tracked declaratively via <code>data-fa-event</code>.</p>
+
+  <div class="card">
+    <h2>Get a proposal</h2>
+    <p class="muted" style="margin-top:0">Submitting this calls <code>funnel.identify()</code> with the consent you give.</p>
+    <label>Email</label><input id="email" type="email" placeholder="you@company.com" value="lee@company.com" />
+    <label>Phone (for WhatsApp)</label><input id="phone" type="text" placeholder="+1…" value="+14155551234" />
+    <div class="check"><input id="c_email" type="checkbox" checked /> <label for="c_email" style="margin:0">Email me tips &amp; offers</label></div>
+    <div class="check"><input id="c_wa" type="checkbox" /> <label for="c_wa" style="margin:0">Message me on WhatsApp</label></div>
+    <div class="row" style="margin-top:16px"><button class="primary" onclick="submitLead()">Get my proposal</button></div>
+  </div>
+
+  <div id="log"><div class="muted">Events sent from this page:</div></div>
+</div>
+
+<!-- The snippet. data-api omitted → posts to this same origin. No write key in dev. -->
+<script src="/track.js" data-site="default" data-auto="on"></script>
+<script>
+  function log(msg) {
+    var d = document.createElement('div'); d.className = 'l'; d.textContent = msg;
+    document.getElementById('log').appendChild(d);
+  }
+  function visit(path, type, meta) {
+    var url = location.origin + path;
+    window.funnel.track(type, { url: url, metadata: meta || {} });
+    log('track ' + type + '  ' + url);
+  }
+  function submitLead() {
+    var traits = {
+      email: document.getElementById('email').value || null,
+      phone: document.getElementById('phone').value || null,
+      email_opt_in: document.getElementById('c_email').checked,
+      whatsapp_opt_in: document.getElementById('c_wa').checked,
+      consent_source: 'demo_proposal_form'
+    };
+    window.funnel.identify(traits);
+    window.funnel.track('form_submit', { url: location.origin + '/proposal', metadata: { form: 'proposal' } });
+    log('identify ' + traits.email + '  (email_opt_in=' + traits.email_opt_in + ', wa_opt_in=' + traits.whatsapp_opt_in + ')');
+  }
+  // log the auto page_view too
+  log('track page_view  ' + location.href + '  (auto, anon=' + window.funnel.anonymousId() + ')');
+</script>
+</body>
+</html>

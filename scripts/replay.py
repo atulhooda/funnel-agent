@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -36,8 +37,10 @@ def _iso(dt: datetime) -> str:
     return dt.isoformat()
 
 
-def replay_journey(client: httpx.Client, base_url: str, site_id: str, journey: dict, now: datetime) -> int:
+def replay_journey(client: httpx.Client, base_url: str, site_id: str, journey: dict, now: datetime, write_key: str = "") -> int:
     headers = {"X-Site-Id": site_id}
+    if write_key:
+        headers["X-Write-Key"] = write_key
     anon = journey["anonymous_id"]
     print(f"\n=== {journey.get('label', journey.get('key'))}  [anonymous_id={anon}] ===")
 
@@ -93,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--journeys", type=Path, default=DEFAULT_JOURNEYS)
     parser.add_argument("--site-id", default="default")
     parser.add_argument("--only", default=None, help="Replay only the journey with this key.")
+    parser.add_argument("--write-key", default=os.environ.get("TRACK_WRITE_KEY", ""),
+                        help="X-Write-Key header (defaults to $TRACK_WRITE_KEY).")
     args = parser.parse_args(argv)
 
     journeys = load_journeys(args.journeys)
@@ -112,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Cannot reach {args.base_url} (is the server running?): {exc}", file=sys.stderr)
                 return 1
             for journey in journeys:
-                total_events += replay_journey(client, args.base_url, args.site_id, journey, now)
+                total_events += replay_journey(client, args.base_url, args.site_id, journey, now, args.write_key)
     except httpx.HTTPStatusError as exc:
         print(f"HTTP {exc.response.status_code} error: {exc.response.text}", file=sys.stderr)
         return 1

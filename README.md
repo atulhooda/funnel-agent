@@ -70,6 +70,60 @@ python scripts/execute.py --base-url http://localhost:8000
 open http://localhost:8000/dashboard
 ```
 
+## Going live on your own site (shadow mode)
+
+The prototype proves the brain on replayed journeys. To run it on **real traffic**
+without sending anything yet:
+
+1. **Deploy** the app + a managed Postgres; load `schema.sql`. The LLM key stays
+   server-side (the browser only posts events).
+2. **Add the snippet** to your site, before `</body>`:
+   ```html
+   <script src="https://YOUR_APP/track.js"
+           data-api="https://YOUR_APP" data-key="YOUR_WRITE_KEY" data-site="default"></script>
+   ```
+   It auto-tracks page views (incl. SPA route changes) and clicks on any
+   `data-fa-event` element, and exposes `funnel.track(type, {metadata})` and
+   `funnel.identify({email, phone, email_opt_in, whatsapp_opt_in, consent_source})`.
+3. **Configure** (env): `TRACK_WRITE_KEY` (require the snippet's key on `/track`),
+   `CORS_ALLOW_ORIGINS` (your site origin), `EXECUTION_MODE=shadow` (never actually send).
+4. **Point config at your site**: `config/page_types.yaml` → your URL patterns;
+   `config/templates.yaml` → your copy; guardrail timezone.
+5. **Schedule** scoring + decisions (cron/worker hitting `/score/run` then `/decide/run`).
+   With `EXECUTION_MODE=shadow`, `/execute/run` logs would-be sends to `sent_messages`
+   without transmitting — watch them on the dashboard.
+6. **Go live** later: implement real senders (Postmark/Twilio) in `execution/stubs.py`
+   `_LIVE`, set up domain auth + consent capture + unsubscribe, then `EXECUTION_MODE=live`.
+
+Try it locally: **`open http://localhost:8000/demo`** — a sample page wired with the
+snippet. Click around and submit the form, then refresh the dashboard to watch the
+new visitor flow through scoring → decision.
+
+### Sending real WhatsApp (Meta Cloud API)
+
+A real sender ([execution/meta_whatsapp.py](execution/meta_whatsapp.py)) is wired
+behind the `Sender` interface. It activates only when `EXECUTION_MODE=live` **and**
+the token + phone-number-id are set — otherwise the stub is used, so it's safe by
+default. You provide (from Meta Business / your WhatsApp Business Account):
+
+| Env | What it is |
+|---|---|
+| `META_WA_ACCESS_TOKEN` | System User **permanent** token with `whatsapp_business_messaging` (temp tokens expire ~24h) |
+| `META_WA_PHONE_NUMBER_ID` | the WABA phone number's **ID** (not the phone number) |
+| `META_WA_MESSAGE_TYPE` | `text` (only inside the 24h window) or `template` (business-initiated outreach) |
+| `META_WA_TEMPLATE_NAME` / `_LANG` | an **approved** template for cold outreach |
+
+**Smoke test** (no template of your own needed): every WABA ships the approved
+`hello_world` template. Set `EXECUTION_MODE=live`, `META_WA_MESSAGE_TYPE=template`,
+`META_WA_TEMPLATE_NAME=hello_world`, `META_WA_TEMPLATE_BODY_PARAM=false`, add your
+own number to the app's test allow-list in Meta, then run the pipeline — the
+guardrails still require the lead's `whatsapp_opt_in`, and execution re-checks it.
+
+For production outreach you'll create your own **approved marketing/utility
+template** and set `META_WA_MESSAGE_TYPE=template` with its name (the decision
+engine's message fills the template's body variable). Email stays stubbed until
+you add an email provider to `_live_registry()` the same way.
+
 ## Folder structure
 
 ```

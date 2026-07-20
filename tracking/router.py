@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from deps import get_site_id
+from deps import get_site_id, require_write_key
 from tracking import service
 from tracking.schemas import (
     IdentifyRequest,
@@ -15,7 +15,7 @@ from tracking.schemas import (
 router = APIRouter(tags=["tracking"])
 
 
-@router.post("/track", response_model=TrackResponse)
+@router.post("/track", response_model=TrackResponse, dependencies=[Depends(require_write_key)])
 async def track(body: TrackRequest, site_id: str = Depends(get_site_id)) -> TrackResponse:
     result = await service.track_event(
         site_id=site_id,
@@ -34,7 +34,7 @@ async def track(body: TrackRequest, site_id: str = Depends(get_site_id)) -> Trac
     )
 
 
-@router.post("/identify", response_model=IdentifyResponse)
+@router.post("/identify", response_model=IdentifyResponse, dependencies=[Depends(require_write_key)])
 async def identify(body: IdentifyRequest, site_id: str = Depends(get_site_id)) -> IdentifyResponse:
     result = await service.identify(
         site_id=site_id,

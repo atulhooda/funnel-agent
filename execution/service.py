@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Optional
 
 from config.loader import get_config
+from config.settings import get_settings
 from db import repositories as repo
 from db.connection import transaction
 from execution.stubs import get_sender
@@ -48,7 +49,8 @@ async def execute_decision(site_id: str, decision_id: int) -> Optional[dict]:
     consent_field = channel_consent.get(channel)
     contact_field = CHANNEL_CONTACT.get(channel)
     to_address = lead.get(contact_field) if (lead and contact_field) else None
-    sender = get_sender(channel)
+    mode = get_settings().execution_mode
+    sender = get_sender(channel, mode)
 
     # --- consent re-check at SEND time (defense in depth beyond the guardrail) ---
     skip_reason: Optional[str] = None
@@ -96,7 +98,8 @@ async def execute_decision(site_id: str, decision_id: int) -> Optional[dict]:
                 "decision_send_at": _iso(decision["send_at"]),
                 "detail": result.detail,
                 "provider_message_id": result.provider_message_id,
-                "note": "stubbed — not transmitted",
+                "mode": mode,
+                "note": "stubbed — not transmitted" if mode != "live" else "live send",
             },
             status=status,
             skip_reason=reason,
