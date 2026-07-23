@@ -1,0 +1,11 @@
+# Never bake secrets or local junk into the image.
+.env
+.git
+.gitignore
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store

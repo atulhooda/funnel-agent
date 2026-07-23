@@ -124,6 +124,25 @@ template** and set `META_WA_MESSAGE_TYPE=template` with its name (the decision
 engine's message fills the template's body variable). Email stays stubbed until
 you add an email provider to `_live_registry()` the same way.
 
+## Deploy (Railway)
+
+The repo ships a `Dockerfile`, `entrypoint.sh` (waits for the DB, applies
+`schema.sql` idempotently, binds the host's `$PORT`), and `railway.toml`.
+
+1. **railway.app → New Project → Deploy from GitHub repo** → pick your repo.
+   Railway detects the Dockerfile and builds it.
+2. **Add Postgres**: in the project, **New → Database → PostgreSQL**.
+3. **Set variables** on the app service:
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (reference the Postgres service)
+   - `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-2.5-flash`
+   - `TRACK_WRITE_KEY` (any random string), `CORS_ALLOW_ORIGINS=https://engageoagency.com,https://www.engageoagency.com`
+   - `EXECUTION_MODE=shadow`, `SITE_ID=default`
+4. **Generate a domain**: app service → Settings → Networking → Generate Domain.
+   The schema applies on first boot; the dashboard is at `/dashboard`.
+5. Point the GTM tag (`FUNNEL_API` + `src`) at that domain.
+
+Locally the same image runs with `docker compose up --build` (app + Postgres).
+
 ## Folder structure
 
 ```
