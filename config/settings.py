@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     meta_wa_template_lang: str = "en_US"
     meta_wa_template_body_param: bool = True   # False for zero-variable templates (e.g. hello_world)
 
+    # Apply schema.sql on startup (idempotent) — makes deploy one-click on any host.
+    run_schema_on_startup: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

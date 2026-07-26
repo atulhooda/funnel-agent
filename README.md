@@ -143,6 +143,28 @@ The repo ships a `Dockerfile`, `entrypoint.sh` (waits for the DB, applies
 
 Locally the same image runs with `docker compose up --build` (app + Postgres).
 
+## Deploy (AWS App Runner + RDS)
+
+`apprunner.yaml` lets App Runner build straight from GitHub — no Docker or ECR.
+The app applies `schema.sql` itself on boot, so there's no manual DB step.
+
+1. **RDS**: create a PostgreSQL instance (`db.t4g.micro` is plenty). For a quick
+   start make it publicly accessible and allow inbound `5432` (lock the security
+   group to your IP / use an App Runner VPC connector for production).
+2. **App Runner** → Create service → **Source: GitHub** → your repo → it reads
+   `apprunner.yaml`.
+3. **Environment variables** (App Runner → Configuration):
+   - `DATABASE_URL=postgresql://USER:PASSWORD@ENDPOINT:5432/DBNAME`
+   - `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-2.5-flash`
+   - `TRACK_WRITE_KEY`, `CORS_ALLOW_ORIGINS=https://engageoagency.com,https://www.engageoagency.com`
+   - `EXECUTION_MODE=shadow`, `SITE_ID=default`
+4. App Runner returns an HTTPS URL (`https://xxxx.<region>.awsapprunner.com`) and
+   uses `/health` as its check. Dashboard at `/dashboard`.
+5. Point the GTM tag at that URL.
+
+Prefer one box? A single EC2 instance running `docker compose up` (this repo's
+compose file) also works — add Caddy/nginx for HTTPS on a subdomain.
+
 ## Folder structure
 
 ```

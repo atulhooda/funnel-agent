@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 
 from config.settings import get_settings
 from dashboard.router import router as dashboard_router
-from db.connection import close_pool, open_pool
+from db.connection import close_pool, ensure_schema, open_pool
 from decision.router import router as decision_router
 from execution.router import router as execution_router
 from scoring.router import router as scoring_router
@@ -29,6 +29,9 @@ STATIC = pathlib.Path(__file__).resolve().parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Apply the schema first (also waits for the DB to come up), then open the pool.
+    if get_settings().run_schema_on_startup:
+        await ensure_schema()
     await open_pool()
     try:
         yield

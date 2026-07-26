@@ -6,9 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# curl for the healthcheck; postgresql-client so the entrypoint can apply schema.sql.
+# curl is only for the container healthcheck (schema is applied by the app itself).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl postgresql-client \
+ && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
