@@ -12,7 +12,7 @@ from __future__ import annotations
 import pathlib
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -20,6 +20,7 @@ from config.settings import get_settings
 from dashboard.router import router as dashboard_router
 from db.connection import close_pool, ensure_schema, open_pool
 from decision.router import router as decision_router
+from deps import require_admin
 from execution.router import router as execution_router
 from scoring.router import router as scoring_router
 from tracking.router import router as tracking_router
@@ -51,11 +52,15 @@ app.add_middleware(
     allow_credentials=False,
 )
 
+# Public (browser ingestion, guarded by its own write-key): tracking only.
 app.include_router(tracking_router)
-app.include_router(scoring_router)
-app.include_router(decision_router)
-app.include_router(execution_router)
-app.include_router(dashboard_router)
+
+# Admin-only: the control routes and the dashboard sit behind HTTP Basic auth.
+_admin = [Depends(require_admin)]
+app.include_router(scoring_router, dependencies=_admin)
+app.include_router(decision_router, dependencies=_admin)
+app.include_router(execution_router, dependencies=_admin)
+app.include_router(dashboard_router, dependencies=_admin)
 
 
 @app.get("/health", tags=["meta"])

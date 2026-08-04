@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     cors_allow_origins: str = "*"        # comma-separated site origins allowed to POST from the browser
     execution_mode: str = "shadow"       # "shadow" = always stub sends; "live" = use real senders
 
+    # Admin auth — HTTP Basic gate on the dashboard + internal /score, /decide, /execute
+    # routes. Public ingestion (/track, /identify) and /health are NOT gated.
+    # Fails CLOSED: if admin_password is empty, protected routes return 503, never open.
+    admin_user: str = "admin"
+    admin_password: str = ""             # REQUIRED in any public deploy; unset = dashboard locked
+
     # Meta WhatsApp Cloud API — real WhatsApp sender (used only when EXECUTION_MODE=live)
     meta_wa_access_token: str = ""            # System User permanent token (whatsapp_business_messaging)
     meta_wa_phone_number_id: str = ""         # the WABA phone number ID (not the phone number)
