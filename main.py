@@ -22,6 +22,8 @@ from db.connection import close_pool, ensure_schema, open_pool
 from decision.router import router as decision_router
 from deps import require_admin
 from execution.router import router as execution_router
+from scheduler import loop as scheduler
+from scheduler.router import router as scheduler_router
 from scoring.router import router as scoring_router
 from tracking.router import router as tracking_router
 
@@ -34,9 +36,11 @@ async def lifespan(app: FastAPI):
     if get_settings().run_schema_on_startup:
         await ensure_schema()
     await open_pool()
+    scheduler.start()  # autonomous score -> decide -> execute loop (if enabled)
     try:
         yield
     finally:
+        await scheduler.stop()
         await close_pool()
 
 
@@ -60,6 +64,7 @@ _admin = [Depends(require_admin)]
 app.include_router(scoring_router, dependencies=_admin)
 app.include_router(decision_router, dependencies=_admin)
 app.include_router(execution_router, dependencies=_admin)
+app.include_router(scheduler_router, dependencies=_admin)
 app.include_router(dashboard_router, dependencies=_admin)
 
 

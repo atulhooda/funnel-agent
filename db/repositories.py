@@ -222,6 +222,60 @@ async def list_lead_ids(cur, site_id: str) -> list[int]:
     return [r["id"] for r in await cur.fetchall()]
 
 
+async def list_leads_needing_score(cur, site_id: str) -> list[int]:
+    """Leads that are unscored, or have a new event since they were last scored.
+
+    Lets the scheduler re-score only what changed instead of every lead each cycle.
+    """
+    await cur.execute(
+        """
+        SELECT l.id
+        FROM leads l
+        WHERE l.site_id = %s
+          AND (
+            l.scored_at IS NULL
+            OR EXISTS (
+                SELECT 1 FROM events e
+                WHERE e.site_id = l.site_id AND e.lead_id = l.id
+                  AND e.received_at > l.scored_at
+            )
+          )
+        ORDER BY l.id
+        """,
+        (site_id,),
+    )
+    return [r["id"] for r in await cur.fetchall()]
+
+
+async def list_leads_needing_decision(cur, site_id: str) -> list[int]:
+    """Scored leads with no decision yet, or (re)scored after their last decision.
+
+    So a decision is (re)made only when a lead's score is newer than its last
+    decision — new/changed visitors get decided, stable ones don't re-spam.
+    """
+    await cur.execute(
+        """
+        SELECT l.id
+        FROM leads l
+        WHERE l.site_id = %s
+          AND l.scored_at IS NOT NULL
+          AND (
+            NOT EXISTS (
+                SELECT 1 FROM decisions d
+                WHERE d.site_id = l.site_id AND d.lead_id = l.id
+            )
+            OR l.scored_at > (
+                SELECT max(d.created_at) FROM decisions d
+                WHERE d.site_id = l.site_id AND d.lead_id = l.id
+            )
+          )
+        ORDER BY l.id
+        """,
+        (site_id,),
+    )
+    return [r["id"] for r in await cur.fetchall()]
+
+
 async def event_aggregates(cur, site_id: str, lead_id: int) -> dict:
     await cur.execute(
         """

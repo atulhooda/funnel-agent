@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     # Apply schema.sql on startup (idempotent) — makes deploy one-click on any host.
     run_schema_on_startup: bool = True
 
+    # Autonomous scheduler — runs the pipeline (score -> decide -> execute) on a
+    # loop so live traffic becomes scored visitors + decisions with no manual
+    # trigger. Only new/changed leads are processed each cycle.
+    scheduler_enabled: bool = True
+    scheduler_interval_seconds: int = 120
+
 
 @lru_cache
 def get_settings() -> Settings:

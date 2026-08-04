@@ -102,3 +102,30 @@ async def score_all(site_id: str) -> dict:
         "leads_flagged": flagged,
         "total_leads": len(lead_ids),
     }
+
+
+async def score_pending(site_id: str) -> dict:
+    """Materialize new profiles, then score ONLY leads that are new or changed.
+
+    The scheduler calls this each cycle so Gemini fires only for visitors whose
+    behavior actually moved, not for the whole table every time.
+    """
+    profiles_created = await materialize_profiles(site_id)
+    async with transaction() as cur:
+        lead_ids = await repo.list_leads_needing_score(cur, site_id)
+
+    scored = flagged = 0
+    for lead_id in lead_ids:
+        result, _error = await score_lead(site_id, lead_id)
+        if result is not None:
+            scored += 1
+        else:
+            flagged += 1
+
+    return {
+        "site_id": site_id,
+        "profiles_created": profiles_created,
+        "considered": len(lead_ids),
+        "leads_scored": scored,
+        "leads_flagged": flagged,
+    }

@@ -87,7 +87,22 @@ async def decide_for_lead(site_id: str, lead_id: int) -> Optional[DecisionOutcom
 async def decide_all(site_id: str) -> dict:
     async with transaction() as cur:
         lead_ids = await repo.list_lead_ids(cur, site_id)
+    return await _decide_for_ids(site_id, lead_ids)
 
+
+async def decide_pending(site_id: str) -> dict:
+    """Decide ONLY leads that were (re)scored after their last decision.
+
+    Called by the scheduler each cycle — avoids re-deciding stable leads (which
+    would spam the decision log and Gemini) while still reacting when a visitor's
+    stage changes (e.g. TOFU -> BOFU after they hit /pricing).
+    """
+    async with transaction() as cur:
+        lead_ids = await repo.list_leads_needing_decision(cur, site_id)
+    return await _decide_for_ids(site_id, lead_ids)
+
+
+async def _decide_for_ids(site_id: str, lead_ids: list[int]) -> dict:
     accepted = rejected = 0
     by_action: dict[str, int] = {}
     for lead_id in lead_ids:
