@@ -19,7 +19,7 @@ class TrackRequest(BaseModel):
 class TrackResponse(BaseModel):
     status: str = "ok"
     site_id: str
-    event_id: int
+    event_id: Optional[int] = None                # None for heartbeats (presence-only, no event stored)
     lead_id: Optional[int] = None                 # set when the anonymous_id is already identified
     page_type: Optional[str] = None               # resolved from config
 

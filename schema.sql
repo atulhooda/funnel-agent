@@ -160,6 +160,23 @@ CREATE INDEX IF NOT EXISTS sent_site_lead_idx ON sent_messages (site_id, lead_id
 CREATE INDEX IF NOT EXISTS sent_site_time_idx ON sent_messages (site_id, created_at DESC);
 
 -- ---------------------------------------------------------------------------
+-- visitor_presence — one row per visitor, updated on every heartbeat/page view.
+--   Powers the dashboard "Live now" panel. Kept OUT of the events table so
+--   frequent heartbeats never bloat event history or skew scoring.
+--   Written by: Layer 1 ingest (upsert). Read by: dashboard /api/live.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS visitor_presence (
+    site_id       TEXT NOT NULL DEFAULT 'default' REFERENCES sites(site_id),
+    anonymous_id  TEXT NOT NULL,
+    session_id    TEXT,
+    url           TEXT,
+    page_type     TEXT,
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (site_id, anonymous_id)
+);
+CREATE INDEX IF NOT EXISTS visitor_presence_seen_idx ON visitor_presence (site_id, last_seen_at DESC);
+
+-- ---------------------------------------------------------------------------
 -- Optional per-site config overrides (DB-row form of the file config).
 --   Files under /config are the source of truth for the prototype; rows here,
 --   when present, override file defaults for a given site — the multi-tenant path.

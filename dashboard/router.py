@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pathlib
 from collections import Counter
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -22,6 +23,8 @@ from deps import get_site_id
 
 router = APIRouter(tags=["dashboard"])
 TEMPLATE = pathlib.Path(__file__).resolve().parent / "templates" / "dashboard.html"
+
+LIVE_WINDOW_SECONDS = 45  # a visitor counts as "live" if seen within this window
 
 
 @router.get("/", include_in_schema=False)
@@ -50,6 +53,20 @@ async def api_decisions(site_id: str = Depends(get_site_id)) -> dict:
 async def api_sent_messages(site_id: str = Depends(get_site_id)) -> dict:
     async with transaction() as cur:
         return {"site_id": site_id, "sent_messages": await repo.list_sent_messages(cur, site_id)}
+
+
+@router.get("/api/live")
+async def api_live(site_id: str = Depends(get_site_id)) -> dict:
+    """Visitors currently on the site (seen within LIVE_WINDOW_SECONDS)."""
+    since = datetime.now(timezone.utc) - timedelta(seconds=LIVE_WINDOW_SECONDS)
+    async with transaction() as cur:
+        visitors = await repo.list_active_visitors(cur, site_id, since)
+    return {
+        "site_id": site_id,
+        "window_seconds": LIVE_WINDOW_SECONDS,
+        "active": len(visitors),
+        "visitors": visitors,
+    }
 
 
 @router.get("/api/overview")

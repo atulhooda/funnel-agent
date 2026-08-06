@@ -222,6 +222,41 @@ async def list_lead_ids(cur, site_id: str) -> list[int]:
     return [r["id"] for r in await cur.fetchall()]
 
 
+async def upsert_presence(
+    cur, *, site_id: str, anonymous_id: str, session_id, url, page_type, last_seen
+) -> None:
+    """Record that a visitor is currently active (one row per visitor, updated in place)."""
+    await cur.execute(
+        """
+        INSERT INTO visitor_presence (site_id, anonymous_id, session_id, url, page_type, last_seen_at)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (site_id, anonymous_id) DO UPDATE
+          SET session_id   = EXCLUDED.session_id,
+              url          = EXCLUDED.url,
+              page_type    = EXCLUDED.page_type,
+              last_seen_at = EXCLUDED.last_seen_at
+        """,
+        (site_id, anonymous_id, session_id, url, page_type, last_seen),
+    )
+
+
+async def list_active_visitors(cur, site_id: str, since: datetime) -> list[dict]:
+    """Visitors seen since `since`, newest first, enriched with lead stage if known."""
+    await cur.execute(
+        """
+        SELECT p.anonymous_id, p.url, p.page_type, p.last_seen_at,
+               i.lead_id, l.funnel_stage, l.intent_score, l.email
+        FROM visitor_presence p
+        LEFT JOIN identities i ON i.site_id = p.site_id AND i.anonymous_id = p.anonymous_id
+        LEFT JOIN leads l      ON l.site_id = p.site_id AND l.id = i.lead_id
+        WHERE p.site_id = %s AND p.last_seen_at > %s
+        ORDER BY p.last_seen_at DESC
+        """,
+        (site_id, since),
+    )
+    return await cur.fetchall()
+
+
 async def list_leads_needing_score(cur, site_id: str) -> list[int]:
     """Leads that are unscored, or have a new event since they were last scored.
 

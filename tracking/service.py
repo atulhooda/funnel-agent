@@ -41,10 +41,29 @@ async def track_event(
     attributed to that lead immediately (live attribution after identify)."""
     occurred_at = _ensure_utc(timestamp)
     page_type, _lean = resolve_page_type(url, site_id)
+    is_heartbeat = event_type == "heartbeat"
 
     async with transaction() as cur:
         identity = await repo.get_or_create_identity(cur, site_id, anonymous_id)
         lead_id = identity.get("lead_id")
+
+        # Every ping refreshes "live now" presence (server time, so clock skew
+        # on the client can't push a visitor out of the live window).
+        await repo.upsert_presence(
+            cur,
+            site_id=site_id,
+            anonymous_id=anonymous_id,
+            session_id=session_id,
+            url=url,
+            page_type=page_type,
+            last_seen=_utcnow(),
+        )
+
+        # Heartbeats are presence-only — they must NOT become events (that would
+        # bloat history and inflate intent). Real events still get stored.
+        if is_heartbeat:
+            return {"event_id": None, "lead_id": lead_id, "page_type": page_type}
+
         event = await repo.insert_event(
             cur,
             site_id=site_id,

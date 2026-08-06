@@ -58,6 +58,10 @@
       font-size:12px; font-weight:650; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-2); }
     .card > h2 .ic { color:var(--muted); }
     .pill-count { margin-left:auto; font-size:11px; color:var(--muted); background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:2px 9px; font-weight:600; letter-spacing:0; }
+    .card > h2 .pill-count + .live-hint { margin-left:10px; }
+    .live-hint { font-size:11px; color:var(--muted); font-weight:500; letter-spacing:0; text-transform:none; }
+    #live-card.has-live > h2 .ic { color:var(--good-t); }
+    #live-card.has-live .pill-count { color:var(--good-t); background:color-mix(in srgb,var(--good) 15%,transparent); border-color:color-mix(in srgb,var(--good) 34%,transparent); }
 
     /* funnel strip */
     .funnel { padding:16px 18px; }
@@ -136,6 +140,14 @@
 
   <div class="kpis" id="kpis"></div>
 
+  <div class="card" id="live-card">
+    <h2><span class="ic" id="ic-live"></span> Live now <span class="pill-count" id="live-n">0</span>
+      <span class="live-hint" id="live-hint"></span></h2>
+    <div class="tw"><table id="live"><thead><tr>
+      <th>Visitor</th><th>On page</th><th>Type</th><th>Stage</th><th>Seen</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
+
   <div class="card">
     <h2><span class="ic" id="ic-funnel"></span> Funnel distribution <span class="pill-count" id="funnel-n"></span></h2>
     <div class="funnel"><div class="bar" id="funnel-bar"></div><div class="cap" id="funnel-cap"></div></div>
@@ -177,6 +189,7 @@
     zap:'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>', send:'<path d="m22 2-7 20-4-9-9-4 20-7z"/>',
     layers:'<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
     filter:'<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>', refresh:'<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+    radio:'<circle cx="12" cy="12" r="2"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14M7.76 16.24a6 6 0 0 1 0-8.48M16.24 7.76a6 6 0 0 1 0 8.48M19.07 4.93a10 10 0 0 1 0 14.14"/>',
   };
   const svg = (n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
   const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -189,10 +202,38 @@
 
   function fillIcons(){
     document.getElementById("refic").innerHTML = svg("refresh",15);
+    document.getElementById("ic-live").innerHTML = svg("radio",15);
     document.getElementById("ic-funnel").innerHTML = svg("filter",15);
     document.getElementById("ic-leads").innerHTML = svg("users",15);
     document.getElementById("ic-dec").innerHTML = svg("zap",15);
     document.getElementById("ic-sent").innerHTML = svg("send",15);
+  }
+
+  const agoText = s => { if(!s) return ''; const d=Math.max(0,Math.round((Date.now()-new Date(s).getTime())/1000)); return d<60?d+"s ago":Math.round(d/60)+"m ago"; };
+  const pathOf = u => { try { return u ? new URL(u).pathname : '—'; } catch(e){ return u||'—'; } };
+
+  function renderLive(data){
+    const rows = data.visitors || [];
+    document.getElementById("live-n").textContent = rows.length;
+    document.getElementById("live-card").classList.toggle("has-live", rows.length>0);
+    document.getElementById("live-hint").textContent =
+      rows.length ? `on the site now · updates every 5s` : `no one on the site right now · updates every 5s`;
+    body("live").innerHTML = rows.map(v=>{
+      const named = !!v.email;
+      const who = named ? esc(v.email) : (v.lead_id ? `Lead #${v.lead_id}` : `Anonymous`);
+      const av = `<span class="av anon">${svg('user',13)}</span>`;
+      return `<tr>
+        <td><div class="lead">${av}<div><span class="who ${named?'':'anon'}">${who}</span></div></div></td>
+        <td class="muted num">${esc(pathOf(v.url))}</td>
+        <td>${v.page_type?`<span class="chip">${esc(v.page_type)}</span>`:'<span class="muted">—</span>'}</td>
+        <td>${stageChip(v.funnel_stage)}</td>
+        <td class="muted num">${agoText(v.last_seen_at)}</td>
+      </tr>`;
+    }).join("") || `<tr><td class="empty" colspan="5">No one on the site right now — open the site in another tab to see yourself here.</td></tr>`;
+  }
+
+  async function refreshLive(){
+    try { renderLive(await get("/api/live")); } catch(e){ /* transient; keep last */ }
   }
 
   function stageChip(s){ return s ? `<span class="chip ${STAGE[s]||'flat'}">${esc(s)}</span>` : '<span class="muted">unscored</span>'; }
@@ -309,7 +350,9 @@
 
   fillIcons();
   refresh();
-  setInterval(refresh, 20000);  // live: auto-refresh
+  refreshLive();
+  setInterval(refresh, 20000);      // leads / decisions / sent
+  setInterval(refreshLive, 5000);   // live-now panel (faster cadence)
 </script>
 </body>
 </html>
