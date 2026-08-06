@@ -123,6 +123,30 @@
     .bubble { max-width:380px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; border-top-left-radius:3px; padding:8px 11px; color:var(--ink-2); font-size:12.5px; line-height:1.45; }
     .flag { color:var(--warn-t); font-size:11px; font-weight:600; }
     .foot { margin-top:26px; color:var(--muted); font-size:12px; text-align:center; }
+
+    /* journey (expandable lead row) */
+    #leads tbody tr:not(.jrow){ cursor:pointer; }
+    #leads tbody tr.open{ background:var(--hover); }
+    .caret{ display:inline-block; width:12px; color:var(--muted); transition:transform .15s; }
+    tr.open .caret{ transform:rotate(90deg); color:var(--blue-l); }
+    tr.jrow:hover{ background:transparent; }
+    tr.jrow > td{ padding:0; background:var(--surface-2); }
+    .journey{ padding:16px 18px 20px; }
+    .jmetrics{ display:flex; flex-wrap:wrap; gap:10px 22px; padding-bottom:14px; margin-bottom:14px; border-bottom:1px solid var(--border); }
+    .jm{ display:flex; flex-direction:column; gap:2px; }
+    .jm-k{ font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+    .jm-v{ font-size:15px; font-weight:640; font-variant-numeric:tabular-nums; }
+    .timeline{ list-style:none; margin:0; padding:0; position:relative; }
+    .timeline:before{ content:""; position:absolute; left:60px; top:4px; bottom:4px; width:1px; background:var(--line); }
+    .timeline li{ display:flex; align-items:flex-start; gap:12px; padding:6px 0; position:relative; }
+    .timeline .jt{ width:52px; flex:none; text-align:right; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; padding-top:2px; }
+    .timeline .jdot{ width:9px; height:9px; border-radius:50%; flex:none; margin-top:4px; background:var(--blue); box-shadow:0 0 0 3px var(--surface-2); z-index:1; }
+    .timeline li.clk .jdot{ background:var(--warn); }
+    .timeline .jc{ min-width:0; }
+    .timeline .jh{ font-size:13px; font-weight:520; }
+    .timeline .js{ font-size:12px; color:var(--muted); margin-top:2px; word-break:break-all; }
+    .timeline .jd{ font-size:11px; color:var(--muted); font-weight:500; margin-left:6px; }
+    .sess-sep{ font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:10px 0 4px 72px; }
   </style>
 </head>
 <body>
@@ -190,6 +214,7 @@
     layers:'<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
     filter:'<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>', refresh:'<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
     radio:'<circle cx="12" cy="12" r="2"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14M7.76 16.24a6 6 0 0 1 0-8.48M16.24 7.76a6 6 0 0 1 0 8.48M19.07 4.93a10 10 0 0 1 0 14.14"/>',
+    chevron:'<path d="m9 18 6-6-6-6"/>', mouse:'<rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 7v4"/>',
   };
   const svg = (n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
   const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -234,6 +259,67 @@
 
   async function refreshLive(){
     try { renderLive(await get("/api/live")); } catch(e){ /* transient; keep last */ }
+  }
+
+  // ---- per-lead journey (expandable row) ----
+  const fmtDur = s => {
+    if(s==null) return '—'; s=Math.round(s);
+    if(s<60) return s+'s';
+    const m=Math.floor(s/60), r=s%60;
+    if(m<60) return m+'m'+(r?' '+r+'s':'');
+    const h=Math.floor(m/60); return h+'h'+((m%60)?' '+(m%60)+'m':'');
+  };
+  const clock = s => s ? esc(s).slice(11,16) : '';   // HH:MM from ISO
+  let openJourneyId = null;
+
+  function collapseJourneys(){
+    document.querySelectorAll('tr.jrow').forEach(r=>r.remove());
+    document.querySelectorAll('#leads tbody tr.open').forEach(r=>r.classList.remove('open'));
+  }
+  function toggleJourney(id, tr){
+    const nxt = tr.nextElementSibling;
+    if(nxt && nxt.classList.contains('jrow')){ collapseJourneys(); openJourneyId=null; return; }
+    openJourney(id, tr);
+  }
+  async function openJourney(id, tr){
+    collapseJourneys(); tr.classList.add('open'); openJourneyId=id;
+    const row=document.createElement('tr'); row.className='jrow';
+    row.innerHTML='<td colspan="7"><div class="journey" id="j-'+id+'">Loading journey…</div></td>';
+    tr.parentNode.insertBefore(row, tr.nextSibling);
+    try{ renderJourney(document.getElementById('j-'+id), await get('/api/lead/'+id+'/journey')); }
+    catch(e){ const b=document.getElementById('j-'+id); if(b) b.textContent='Could not load journey: '+e.message; }
+  }
+  function reopenJourneyAfterRefresh(){
+    if(openJourneyId==null) return;
+    const tr=document.querySelector('#leads tbody tr[data-lead-id="'+openJourneyId+'"]');
+    if(tr) openJourney(openJourneyId, tr); else openJourneyId=null;
+  }
+  function renderJourney(box, d){
+    const s=d.summary;
+    const M=[['Total time',fmtDur(s.total_time_seconds)],['Active time',fmtDur(s.active_time_seconds)],
+      ['Page views',s.pageviews],['Clicks',s.clicks],['Pages',s.pages_distinct],['Sessions',s.sessions],
+      ['First seen',ts(s.first_seen)||'—'],['Last seen',ts(s.last_seen)||'—']];
+    const metrics=M.map(m=>`<div class="jm"><span class="jm-k">${esc(m[0])}</span><span class="jm-v">${esc(m[1])}</span></div>`).join('');
+    let lastSess=null, items='';
+    (d.timeline||[]).forEach(e=>{
+      if(e.session_id && e.session_id!==lastSess){ lastSess=e.session_id; if(items) items+=`<div class="sess-sep">— new session —</div>`; }
+      const isClick=e.event_type!=='page_view';
+      const clk=e.metadata||{};
+      let head, sub='';
+      if(isClick){
+        const label=clk.text?`“${esc(clk.text)}”`:esc(clk.tag||e.event_type);
+        head=`${svg('mouse',12)} Clicked ${label}`;
+        sub=clk.href?`on ${esc(e.path)} → ${esc(clk.href)}`:`on ${esc(e.path)}`;
+      } else {
+        const chip=e.page_type?`<span class="chip">${esc(e.page_type)}</span>`:'';
+        const dwell=e.dwell_seconds?`<span class="jd">${fmtDur(e.dwell_seconds)} on page</span>`:'';
+        head=`${esc(e.path)} ${dwell}`;
+        sub=chip;
+      }
+      items+=`<li class="${isClick?'clk':'pv'}"><span class="jt">${clock(e.occurred_at)}</span><span class="jdot"></span>
+        <div class="jc"><div class="jh">${head}</div>${sub?`<div class="js">${sub}</div>`:''}</div></li>`;
+    });
+    box.innerHTML=`<div class="jmetrics">${metrics}</div><ul class="timeline">${items||'<li class="muted">No events recorded yet.</li>'}</ul>`;
   }
 
   function stageChip(s){ return s ? `<span class="chip ${STAGE[s]||'flat'}">${esc(s)}</span>` : '<span class="muted">unscored</span>'; }
@@ -299,8 +385,8 @@
       const av = anon ? `<span class="av anon">${svg('user',13)}</span>` : `<span class="av">${esc(l.email[0].toUpperCase())}</span>`;
       const who = anon ? `<span class="who anon">Anonymous #${l.id}</span>` : `<span class="who">${esc(l.email)}</span>`;
       const flag = l.scoring_error ? ` <span class="flag" title="${esc(l.scoring_error)}">⚠ flagged</span>` : "";
-      return `<tr>
-        <td><div class="lead">${av}<div>${who}${flag}</div></div></td>
+      return `<tr data-lead-id="${l.id}" onclick="toggleJourney(${l.id}, this)">
+        <td><div class="lead"><span class="caret">${svg('chevron',12)}</span>${av}<div>${who}${flag}</div></div></td>
         <td>${stageChip(l.funnel_stage)}</td>
         <td>${meter(l.intent_score)}</td>
         <td><div class="consent">${cp(l.email_opt_in,'email')}${cp(l.whatsapp_opt_in,'wa')}</div></td>
@@ -342,6 +428,7 @@
       renderKpis(L.leads,D.decisions,S.sent_messages);
       renderFunnel(L.leads);
       renderLeads(L.leads); renderDecisions(D.decisions); renderSent(S.sent_messages);
+      reopenJourneyAfterRefresh();
       document.getElementById("updated").textContent = "updated "+new Date().toLocaleTimeString();
     }catch(e){
       document.getElementById("kpis").innerHTML = `<div class="tile" style="grid-column:1/-1;border-color:color-mix(in srgb,var(--crit) 40%,transparent)"><div class="k" style="color:var(--crit-t)">Error</div><div class="s">${esc(e.message)} — is the app running and the DB reachable?</div></div>`;

@@ -311,6 +311,36 @@ async def list_leads_needing_decision(cur, site_id: str) -> list[int]:
     return [r["id"] for r in await cur.fetchall()]
 
 
+async def list_events_for_lead(cur, site_id: str, lead_id: int, limit: int = 1000) -> list[dict]:
+    """Full event timeline for a lead (oldest first) — powers the journey view."""
+    await cur.execute(
+        """
+        SELECT id, event_type, url, page_type, session_id, metadata, occurred_at
+        FROM events
+        WHERE site_id = %s AND lead_id = %s
+        ORDER BY occurred_at ASC, id ASC
+        LIMIT %s
+        """,
+        (site_id, lead_id, limit),
+    )
+    return await cur.fetchall()
+
+
+async def lead_last_presence(cur, site_id: str, lead_id: int):
+    """Most recent 'live' heartbeat across all of a lead's anonymous ids (or None)."""
+    await cur.execute(
+        """
+        SELECT max(p.last_seen_at) AS last_seen
+        FROM visitor_presence p
+        JOIN identities i ON i.site_id = p.site_id AND i.anonymous_id = p.anonymous_id
+        WHERE p.site_id = %s AND i.lead_id = %s
+        """,
+        (site_id, lead_id),
+    )
+    row = await cur.fetchone()
+    return row["last_seen"] if row else None
+
+
 async def event_aggregates(cur, site_id: str, lead_id: int) -> dict:
     await cur.execute(
         """

@@ -101,13 +101,23 @@
     });
     window.addEventListener('popstate', pageview);
 
-    // Declarative click tracking: <button data-fa-event="cta_click" data-fa-id="hero">
+    // Click tracking — declarative (data-fa-event) AND generic (links/buttons),
+    // so meaningful clicks are captured even without any markup on the site.
     document.addEventListener('click', function (e) {
-      var el = e.target.closest && e.target.closest('[data-fa-event]');
-      if (el) track(el.getAttribute('data-fa-event'), {
-        metadata: { id: el.getAttribute('data-fa-id') || null, text: (el.textContent || '').trim().slice(0, 60) }
-      });
-    });
+      var t = e.target;
+      var el = t && t.closest && t.closest('[data-fa-event], a, button, [role="button"], input[type="submit"], input[type="button"]');
+      if (!el) return;
+      var custom = el.getAttribute('data-fa-event');
+      var text = (el.innerText || el.textContent || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+      var href = el.tagName === 'A' ? (el.getAttribute('href') || null) : null;
+      var meta = {
+        tag: (el.tagName || '').toLowerCase(),
+        text: text,
+        id: el.getAttribute('data-fa-id') || el.id || null,
+        href: href
+      };
+      track(custom || 'click', { metadata: meta });
+    }, true);
 
     // Presence heartbeat — powers the dashboard "Live now" view. Lightweight,
     // visibility-aware (paused when the tab is hidden), and stored as presence
