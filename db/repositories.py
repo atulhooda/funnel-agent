@@ -631,7 +631,11 @@ async def list_leads(cur, site_id: str) -> list[dict]:
         SELECT l.id, l.name, l.email, l.phone, l.email_opt_in, l.whatsapp_opt_in, l.consent_source,
                l.funnel_stage, l.intent_score, l.likely_objections, l.persona_signals,
                l.scored_at, l.scoring_error, l.created_at,
-               g.country, g.region, g.city, g.timezone
+               g.country, g.region, g.city, g.timezone,
+               COALESCE(
+                 (SELECT max(e.occurred_at) FROM events e WHERE e.site_id = l.site_id AND e.lead_id = l.id),
+                 l.created_at
+               ) AS last_activity
         FROM leads l
         LEFT JOIN LATERAL (
             SELECT country, region, city, timezone
@@ -641,7 +645,7 @@ async def list_leads(cur, site_id: str) -> list[dict]:
             ORDER BY i.id DESC LIMIT 1
         ) g ON true
         WHERE l.site_id = %s
-        ORDER BY l.intent_score DESC NULLS LAST, l.id
+        ORDER BY last_activity DESC, l.id DESC
         """,
         (site_id,),
     )
