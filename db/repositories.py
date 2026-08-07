@@ -279,6 +279,83 @@ async def upsert_presence(
     )
 
 
+# --------------------------------------------------------------------------- #
+# insights / page analytics
+# --------------------------------------------------------------------------- #
+
+# strip scheme+host and query -> just the path (so /pricing?x=1 groups with /pricing)
+_PATH_SQL = "NULLIF(split_part(regexp_replace(url, '^https?://[^/]+', ''), '?', 1), '')"
+
+
+async def insights_totals(cur, site_id: str) -> dict:
+    await cur.execute(
+        f"""
+        SELECT
+          count(*) FILTER (WHERE event_type = 'page_view')                          AS pageviews,
+          count(*) FILTER (WHERE event_type NOT IN ('page_view', 'heartbeat'))      AS clicks,
+          count(*)                                                                   AS events,
+          count(DISTINCT anonymous_id)                                               AS visitors,
+          count(DISTINCT session_id)                                                 AS sessions,
+          count(DISTINCT {_PATH_SQL}) FILTER (WHERE event_type = 'page_view')        AS pages
+        FROM events
+        WHERE site_id = %s
+        """,
+        (site_id,),
+    )
+    return await cur.fetchone()
+
+
+async def page_views_breakdown(cur, site_id: str) -> list[dict]:
+    """Per-page views + unique visitors, most-viewed first."""
+    await cur.execute(
+        f"""
+        SELECT COALESCE({_PATH_SQL}, '/') AS path,
+               min(page_type)             AS page_type,
+               count(*)                   AS views,
+               count(DISTINCT anonymous_id) AS visitors
+        FROM events
+        WHERE site_id = %s AND event_type = 'page_view' AND url IS NOT NULL
+        GROUP BY 1
+        ORDER BY views DESC, path
+        """,
+        (site_id,),
+    )
+    return await cur.fetchall()
+
+
+async def page_type_breakdown(cur, site_id: str) -> list[dict]:
+    await cur.execute(
+        """
+        SELECT COALESCE(page_type, 'other') AS page_type,
+               count(*)                      AS views,
+               count(DISTINCT anonymous_id)  AS visitors
+        FROM events
+        WHERE site_id = %s AND event_type = 'page_view'
+        GROUP BY 1
+        ORDER BY views DESC
+        """,
+        (site_id,),
+    )
+    return await cur.fetchall()
+
+
+async def views_by_day(cur, site_id: str, days: int) -> list[dict]:
+    await cur.execute(
+        """
+        SELECT to_char(date_trunc('day', occurred_at), 'YYYY-MM-DD') AS day,
+               count(*)                                              AS views,
+               count(DISTINCT anonymous_id)                          AS visitors
+        FROM events
+        WHERE site_id = %s AND event_type = 'page_view'
+          AND occurred_at > (now() - make_interval(days => %s))
+        GROUP BY 1
+        ORDER BY 1
+        """,
+        (site_id, days),
+    )
+    return await cur.fetchall()
+
+
 async def list_active_visitors(cur, site_id: str, since: datetime) -> list[dict]:
     """Visitors seen since `since`, newest first, enriched with lead stage if known."""
     await cur.execute(

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Funnel Agent · Insights</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg:#f6f1e6; --surface:#fffdf7; --surface-2:#f1ead9; --hover:rgba(120,90,30,.05);
+      --ink:#332f27; --ink-2:#5f584b; --muted:#9a9081;
+      --grid:#e8e0cd; --line:#e6ddc8; --border:rgba(70,55,25,.15); --border-2:rgba(70,55,25,.075);
+      --amber:#c8892c; --amber-d:#b07620; --amber-l:#e3b45f; --link:#9a6410;
+      --shadow:0 1px 2px rgba(80,60,25,.05), 0 2px 7px rgba(80,60,25,.045);
+      --r:14px;
+    }
+    * { box-sizing:border-box; }
+    html,body { margin:0; }
+    body {
+      background:
+        radial-gradient(1150px 440px at 82% -12%, rgba(214,168,72,.20), transparent 62%),
+        var(--bg);
+      background-attachment:fixed;
+      color:var(--ink);
+      font:14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    svg { display:block; }
+
+    /* layout + sidebar */
+    .shell { display:flex; min-height:100vh; align-items:stretch; }
+    .sidebar { width:224px; flex:none; border-right:1px solid var(--border); background:var(--surface);
+      padding:22px 14px; position:sticky; top:0; height:100vh; display:flex; flex-direction:column; }
+    .side-brand { display:flex; align-items:center; gap:9px; font-weight:660; font-size:15px; letter-spacing:-.01em; padding:2px 8px 20px; }
+    .side-logo { width:26px; height:26px; border-radius:8px; background:linear-gradient(180deg,var(--amber-l),var(--amber-d)); display:flex; align-items:center; justify-content:center; color:#fff; }
+    .side-nav { display:flex; flex-direction:column; gap:3px; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:9px; color:var(--ink-2); text-decoration:none; font-size:13.5px; font-weight:520; }
+    .nav-item:hover { background:var(--hover); color:var(--ink); }
+    .nav-item.active { background:color-mix(in srgb,var(--amber) 15%,transparent); color:var(--link); font-weight:600; }
+    .nav-item svg { width:16px; height:16px; opacity:.9; }
+    .side-foot { margin-top:auto; padding:10px 11px 2px; color:var(--muted); font-size:11.5px; display:flex; align-items:center; gap:7px; }
+    .dot { width:7px; height:7px; border-radius:50%; background:#4a8f52; }
+
+    .app { flex:1; min-width:0; max-width:1160px; margin:0 auto; padding:30px 30px 72px; }
+    .top { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:24px; flex-wrap:wrap; }
+    .top h1 { margin:0; font-size:21px; font-weight:640; letter-spacing:-.02em; }
+    .top .sub { margin-top:6px; color:var(--muted); font-size:12.5px; }
+    .updated { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
+
+    .kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:18px; }
+    @media (max-width:900px){ .kpis{ grid-template-columns:repeat(2,1fr);} }
+    .tile { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:15px 17px; box-shadow:var(--shadow); }
+    .tile .k { font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+    .tile .v { font-size:29px; font-weight:660; letter-spacing:-.02em; margin-top:6px; line-height:1; font-variant-numeric:tabular-nums; }
+    .tile .s { margin-top:8px; font-size:11.5px; color:var(--ink-2); }
+
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); margin-top:20px; overflow:hidden; box-shadow:var(--shadow); }
+    .card > h2 { margin:0; padding:14px 18px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--border);
+      font-size:12px; font-weight:650; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-2); }
+    .card > h2 .ic { color:var(--muted); display:flex; }
+    .card .pad { padding:16px 18px; }
+    .grid2 { display:grid; grid-template-columns:1.15fr .85fr; gap:20px; }
+    @media (max-width:860px){ .grid2{ grid-template-columns:1fr; gap:0; } }
+
+    /* horizontal bars */
+    .hbar { display:grid; grid-template-columns:minmax(90px,190px) 1fr auto; align-items:center; gap:12px; padding:7px 0; }
+    .hbar + .hbar { border-top:1px solid var(--border-2); }
+    .hbar-l { font-size:12.5px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .hbar-l .pt { color:var(--muted); font-size:11px; }
+    .hbar-track { height:12px; border-radius:6px; background:var(--grid); overflow:hidden; }
+    .hbar-fill { height:100%; border-radius:6px; background:linear-gradient(90deg,var(--amber-l),var(--amber)); }
+    .hbar-v { font-size:12.5px; font-weight:600; font-variant-numeric:tabular-nums; text-align:right; min-width:44px; }
+    .hbar-v .sub { display:block; font-size:11px; font-weight:400; color:var(--muted); }
+
+    /* trend area chart */
+    .chartwrap { position:relative; }
+    .chart { width:100%; height:200px; }
+    .cx { stroke:var(--amber-d); stroke-width:1; stroke-dasharray:3 3; opacity:0; }
+    .pt { fill:var(--amber); stroke:var(--surface); stroke-width:2; opacity:0; }
+    .tt { position:absolute; pointer-events:none; background:var(--ink); color:#fff8ec; font-size:11.5px;
+      padding:6px 9px; border-radius:8px; transform:translate(-50%,-120%); white-space:nowrap; opacity:0; transition:opacity .1s; z-index:3; }
+    .tt b { font-weight:640; }
+    .axlabel { fill:var(--muted); font-size:10.5px; }
+
+    /* table */
+    .tw { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th { text-align:left; padding:11px 16px; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:600; border-bottom:1px solid var(--border); white-space:nowrap; }
+    th.r, td.r { text-align:right; font-variant-numeric:tabular-nums; }
+    td { padding:11px 16px; border-bottom:1px solid var(--border-2); }
+    tr:last-child td { border-bottom:none; }
+    tbody tr:hover { background:var(--hover); }
+    .chip { display:inline-flex; align-items:center; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); color:var(--ink-2); }
+    .muted { color:var(--muted); }
+    .empty { padding:26px 16px; color:var(--muted); text-align:center; }
+    .pathcell { font-variant-numeric:tabular-nums; }
+    .barcell { position:relative; }
+    .barcell .mini { height:5px; border-radius:3px; background:linear-gradient(90deg,var(--amber-l),var(--amber)); margin-top:5px; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="side-brand"><span class="side-logo" id="logo"></span> Funnel Agent</div>
+    <nav class="side-nav">
+      <a class="nav-item" href="/dashboard"><span id="ic-ov"></span> Overview</a>
+      <a class="nav-item active" href="/insights"><span id="ic-in"></span> Insights</a>
+    </nav>
+    <div class="side-foot"><span class="dot"></span> shadow mode</div>
+  </aside>
+
+  <main class="app">
+    <div class="top">
+      <div>
+        <h1>Insights</h1>
+        <div class="sub">Which pages your visitors actually look at — views, unique visitors, and trend.</div>
+      </div>
+      <span class="updated" id="updated"></span>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <h2><span class="ic" id="ic-trend"></span> Page views · last 14 days</h2>
+      <div class="pad"><div class="chartwrap"><svg class="chart" id="trend" preserveAspectRatio="none"></svg><div class="tt" id="tt"></div></div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2><span class="ic" id="ic-top"></span> Most viewed pages</h2>
+        <div class="pad" id="toppages"></div>
+      </div>
+      <div class="card">
+        <h2><span class="ic" id="ic-type"></span> Views by page type</h2>
+        <div class="pad" id="pagetypes"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="ic" id="ic-all"></span> All pages <span style="margin-left:auto;font-size:11px;color:var(--muted);font-weight:600" id="alln"></span></h2>
+      <div class="tw"><table id="alltable"><thead><tr>
+        <th>Page</th><th>Type</th><th class="r">Views</th><th class="r">Unique visitors</th><th>Share</th>
+      </tr></thead><tbody></tbody></table></div>
+    </div>
+  </main>
+</div>
+
+<script>
+  const P = {
+    grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    bars:'<path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="14" width="3" height="3" rx="1"/>',
+    trend:'<path d="M3 3v18h18"/><path d="m7 14 3-4 4 3 5-7"/>',
+    eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+    layers:'<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+    list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    spark:'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+  };
+  const svg = (n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
+  const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const fmt = n => new Intl.NumberFormat().format(n||0);
+  const get = async p => { const r=await fetch(p); if(!r.ok) throw new Error(p+" → "+r.status); return r.json(); };
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const dateShort = s => { const [y,m,d]=s.split("-"); return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m-1]+" "+ +d; };
+
+  function icons(){
+    document.getElementById("logo").innerHTML = svg("spark",14);
+    document.getElementById("ic-ov").innerHTML = svg("grid",16);
+    document.getElementById("ic-in").innerHTML = svg("bars",16);
+    document.getElementById("ic-trend").innerHTML = svg("trend",15);
+    document.getElementById("ic-top").innerHTML = svg("eye",15);
+    document.getElementById("ic-type").innerHTML = svg("layers",15);
+    document.getElementById("ic-all").innerHTML = svg("list",15);
+  }
+
+  function renderKpis(t){
+    t = t || {};
+    const tiles = [
+      ["Page views", fmt(t.pageviews), "across the site"],
+      ["Unique visitors", fmt(t.visitors), "distinct people"],
+      ["Sessions", fmt(t.sessions), "browsing sessions"],
+      ["Pages tracked", fmt(t.pages), "distinct URLs"],
+      ["Clicks", fmt(t.clicks), "tracked interactions"],
+    ];
+    document.getElementById("kpis").innerHTML = tiles.map(x=>
+      `<div class="tile"><div class="k">${x[0]}</div><div class="v">${x[1]}</div><div class="s">${x[2]}</div></div>`).join("");
+  }
+
+  function hbars(rows, labelHtml, valueOf, subOf){
+    if(!rows.length) return `<div class="muted" style="padding:8px 0">No page views yet.</div>`;
+    const max = Math.max(1, ...rows.map(valueOf));
+    return rows.map(r=>{
+      const pct = Math.max(2, Math.round(valueOf(r)/max*100));
+      const sub = subOf ? `<span class="sub">${subOf(r)}</span>` : "";
+      return `<div class="hbar" title="${esc(labelHtml(r,true))} — ${fmt(valueOf(r))} views">
+        <div class="hbar-l">${labelHtml(r)}</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:${pct}%"></div></div>
+        <div class="hbar-v">${fmt(valueOf(r))}${sub}</div></div>`;
+    }).join("");
+  }
+
+  function renderTopPages(pages){
+    const rows = pages.slice(0,10);
+    document.getElementById("toppages").innerHTML = hbars(
+      rows,
+      (r,plain)=> plain ? r.path : `${esc(r.path)}${r.page_type?` <span class="pt">· ${esc(r.page_type)}</span>`:""}`,
+      r=>r.views,
+      r=>`${fmt(r.visitors)} ppl`
+    );
+  }
+  function renderPageTypes(types){
+    document.getElementById("pagetypes").innerHTML = hbars(
+      types, (r)=>esc(r.page_type), r=>r.views, r=>`${fmt(r.visitors)} ppl`
+    );
+  }
+
+  function renderAllPages(pages){
+    document.getElementById("alln").textContent = pages.length+" pages";
+    const total = pages.reduce((a,r)=>a+r.views,0) || 1;
+    const max = Math.max(1, ...pages.map(r=>r.views));
+    const tb = document.querySelector("#alltable tbody");
+    tb.innerHTML = pages.map(r=>{
+      const pct = (r.views/total*100);
+      const w = Math.max(3, Math.round(r.views/max*100));
+      return `<tr>
+        <td class="pathcell">${esc(r.path)}</td>
+        <td>${r.page_type?`<span class="chip">${esc(r.page_type)}</span>`:'<span class="muted">—</span>'}</td>
+        <td class="r">${fmt(r.views)}</td>
+        <td class="r">${fmt(r.visitors)}</td>
+        <td class="barcell" style="min-width:120px"><span class="muted">${pct.toFixed(1)}%</span><div class="mini" style="width:${w}%"></div></td>
+      </tr>`;
+    }).join("") || `<tr><td class="empty" colspan="5">No page views recorded yet.</td></tr>`;
+  }
+
+  // --- trend area chart (single series, hover crosshair) ---
+  let TREND = [];
+  function renderTrend(data){
+    TREND = data || [];
+    const svgEl = document.getElementById("trend");
+    const W = 760, H = 200, padL = 34, padR = 12, padT = 14, padB = 24;
+    svgEl.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const n = TREND.length;
+    const maxV = Math.max(1, ...TREND.map(d=>d.views));
+    const x = i => padL + (n<=1?0:(i/(n-1))*(W-padL-padR));
+    const y = v => padT + (1 - v/maxV) * (H-padT-padB);
+    const pts = TREND.map((d,i)=>[x(i), y(d.views)]);
+    const line = pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+    const area = `M${x(0).toFixed(1)} ${(H-padB)} `+pts.map(p=>"L"+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ")+` L${x(n-1).toFixed(1)} ${(H-padB)} Z`;
+    // gridlines (y): 0, mid, max
+    const ticks = [0, Math.round(maxV/2), maxV];
+    let grid = ticks.map(v=>`<line x1="${padL}" x2="${W-padR}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--line)" stroke-width="1"/><text class="axlabel" x="${padL-6}" y="${(y(v)+3).toFixed(1)}" text-anchor="end">${v}</text>`).join("");
+    // x labels ~ every ceil(n/5)
+    const step = Math.max(1, Math.ceil(n/5));
+    let xlab = "";
+    for(let i=0;i<n;i+=step){ xlab += `<text class="axlabel" x="${x(i).toFixed(1)}" y="${H-6}" text-anchor="middle">${dateShort(TREND[i].day)}</text>`; }
+    svgEl.innerHTML =
+      `<defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+         <stop offset="0" stop-color="var(--amber)" stop-opacity="0.30"/>
+         <stop offset="1" stop-color="var(--amber)" stop-opacity="0.02"/></linearGradient></defs>`+
+      grid + xlab +
+      `<path d="${area}" fill="url(#ag)"/>`+
+      `<path d="${line}" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`+
+      `<line class="cx" id="cx" y1="${padT}" y2="${H-padB}"/>`+
+      `<circle class="pt" id="ptm" r="4.5"/>`+
+      `<rect id="hit" x="${padL}" y="0" width="${W-padL-padR}" height="${H}" fill="transparent"/>`;
+    // hover
+    const hit=document.getElementById("hit"), cx=document.getElementById("cx"), ptm=document.getElementById("ptm"), tt=document.getElementById("tt");
+    const wrap=svgEl.parentElement;
+    function move(ev){
+      const r=svgEl.getBoundingClientRect();
+      const px=(ev.clientX-r.left)/r.width*W;
+      let i=Math.round((px-padL)/((W-padL-padR)/(Math.max(1,n-1))));
+      i=Math.max(0,Math.min(n-1,i));
+      const d=TREND[i]; if(!d) return;
+      cx.setAttribute("x1",x(i)); cx.setAttribute("x2",x(i)); cx.style.opacity=1;
+      ptm.setAttribute("cx",x(i)); ptm.setAttribute("cy",y(d.views)); ptm.style.opacity=1;
+      tt.style.opacity=1;
+      tt.innerHTML=`<b>${fmt(d.views)}</b> views · ${fmt(d.visitors)} ppl<br>${dateShort(d.day)}`;
+      tt.style.left=(x(i)/W*r.width)+"px";
+      tt.style.top=(y(d.views)/H*r.height)+"px";
+    }
+    function leave(){ cx.style.opacity=0; ptm.style.opacity=0; tt.style.opacity=0; }
+    hit.addEventListener("mousemove",move); hit.addEventListener("mouseleave",leave);
+  }
+
+  async function load(){
+    try{
+      const d = await get("/api/insights");
+      renderKpis(d.totals);
+      renderTrend(d.by_day);
+      renderTopPages(d.pages);
+      renderPageTypes(d.page_types);
+      renderAllPages(d.pages);
+      document.getElementById("updated").textContent = "updated "+new Date().toLocaleTimeString();
+    }catch(e){
+      document.getElementById("kpis").innerHTML = `<div class="tile" style="grid-column:1/-1"><div class="k" style="color:var(--crit)">Error</div><div class="s">${esc(e.message)}</div></div>`;
+    }
+  }
+  icons(); load(); setInterval(load, 30000);
+</script>
+</body>
+</html>

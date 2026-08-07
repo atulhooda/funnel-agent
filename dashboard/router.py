@@ -23,9 +23,12 @@ from db.connection import transaction
 from deps import get_site_id
 
 router = APIRouter(tags=["dashboard"])
-TEMPLATE = pathlib.Path(__file__).resolve().parent / "templates" / "dashboard.html"
+_TPL_DIR = pathlib.Path(__file__).resolve().parent / "templates"
+TEMPLATE = _TPL_DIR / "dashboard.html"
+INSIGHTS_TEMPLATE = _TPL_DIR / "insights.html"
 
 LIVE_WINDOW_SECONDS = 45   # a visitor counts as "live" if seen within this window
+INSIGHTS_DAYS = 14         # trend window for the insights page
 DWELL_CAP_SECONDS = 1800   # cap a single page's counted dwell so idle time isn't over-counted
 
 
@@ -47,6 +50,39 @@ async def root() -> RedirectResponse:
 @router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard_page() -> HTMLResponse:
     return HTMLResponse(TEMPLATE.read_text(encoding="utf-8"))
+
+
+@router.get("/insights", response_class=HTMLResponse, include_in_schema=False)
+async def insights_page() -> HTMLResponse:
+    return HTMLResponse(INSIGHTS_TEMPLATE.read_text(encoding="utf-8"))
+
+
+@router.get("/api/insights")
+async def api_insights(site_id: str = Depends(get_site_id)) -> dict:
+    """Page analytics: totals, per-page views, page-type split, and a daily trend."""
+    async with transaction() as cur:
+        totals = await repo.insights_totals(cur, site_id)
+        pages = await repo.page_views_breakdown(cur, site_id)
+        page_types = await repo.page_type_breakdown(cur, site_id)
+        by_day_rows = await repo.views_by_day(cur, site_id, INSIGHTS_DAYS)
+
+    # fill missing days so the trend line is continuous
+    today = datetime.now(timezone.utc).date()
+    seen = {r["day"]: r for r in by_day_rows}
+    by_day = []
+    for i in range(INSIGHTS_DAYS - 1, -1, -1):
+        d = (today - timedelta(days=i)).isoformat()
+        row = seen.get(d)
+        by_day.append({"day": d, "views": (row["views"] if row else 0),
+                       "visitors": (row["visitors"] if row else 0)})
+
+    return {
+        "site_id": site_id,
+        "totals": totals,
+        "pages": pages,
+        "page_types": page_types,
+        "by_day": by_day,
+    }
 
 
 @router.get("/api/leads")
