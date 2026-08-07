@@ -150,6 +150,26 @@
     .timeline .js{ font-size:12px; color:var(--muted); margin-top:2px; word-break:break-all; }
     .timeline .jd{ font-size:11px; color:var(--muted); font-weight:500; margin-left:6px; }
     .sess-sep{ font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:10px 0 4px 72px; }
+
+    /* lead detail slide-over */
+    .overlay{ position:fixed; inset:0; background:rgba(60,45,15,.30); backdrop-filter:blur(2px); opacity:0; visibility:hidden; transition:opacity .18s; z-index:40; }
+    .overlay.show{ opacity:1; visibility:visible; }
+    .drawer{ position:fixed; top:0; right:0; height:100%; width:min(600px,96vw); background:var(--bg); border-left:1px solid var(--border); box-shadow:-18px 0 48px rgba(80,60,25,.20); transform:translateX(102%); transition:transform .24s cubic-bezier(.4,0,.2,1); z-index:41; display:flex; flex-direction:column; }
+    .drawer.show{ transform:none; }
+    .dhead{ padding:18px 20px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; background:var(--surface); }
+    .dhead .av{ width:38px; height:38px; font-size:14px; }
+    .dwho{ font-size:16px; font-weight:640; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dsub{ margin-top:6px; display:flex; align-items:center; gap:10px; }
+    .dclose{ margin-left:auto; flex:none; display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--ink-2); cursor:pointer; }
+    .dclose:hover{ background:#efe7d5; }
+    .dbody{ overflow-y:auto; padding:8px 20px 32px; }
+    .dbody .journey{ padding:12px 0 0; }
+    .dsection{ margin-top:22px; }
+    .dsection > h3{ font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:650; margin:0 0 12px; padding-bottom:8px; border-bottom:1px solid var(--border-2); }
+    .dcard{ border:1px solid var(--border); border-radius:11px; padding:12px 13px; margin-bottom:10px; background:var(--surface); }
+    .dcard-h{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+    .dcard-b{ margin-top:9px; font-size:12.5px; line-height:1.5; color:var(--ink-2); }
+    .small{ font-size:11.5px; }
   </style>
 </head>
 <body>
@@ -181,28 +201,23 @@
   </div>
 
   <div class="card">
-    <h2><span class="ic" id="ic-leads"></span> Leads <span class="pill-count" id="leads-n"></span></h2>
+    <h2><span class="ic" id="ic-leads"></span> Leads
+      <span class="live-hint">— click a lead to open their full journey</span>
+      <span class="pill-count" id="leads-n"></span></h2>
     <div class="tw"><table id="leads"><thead><tr>
       <th>Lead</th><th>Stage</th><th>Intent</th><th>Consent</th><th>Objections</th><th>Persona</th><th>Scored</th>
     </tr></thead><tbody></tbody></table></div>
   </div>
 
-  <div class="card">
-    <h2><span class="ic" id="ic-dec"></span> Decision log <span class="pill-count" id="dec-n"></span></h2>
-    <div class="tw"><table id="decisions"><thead><tr>
-      <th>Lead</th><th>Action</th><th>Status</th><th>Channel</th><th>Send at</th><th>Reasoning</th><th>Guardrails</th>
-    </tr></thead><tbody></tbody></table></div>
-  </div>
-
-  <div class="card">
-    <h2><span class="ic" id="ic-sent"></span> Sent messages <span class="pill-count" id="sent-n"></span></h2>
-    <div class="tw"><table id="sent"><thead><tr>
-      <th>Lead</th><th>Channel</th><th>To</th><th>Status</th><th>Message / skip reason</th>
-    </tr></thead><tbody></tbody></table></div>
-  </div>
-
-  <div class="foot">Behavioral events replayed from seeded journeys · scored & decided by Gemini · guardrails enforced · sends stubbed.</div>
+  <div class="foot">Behavioral events scored & decided by Gemini · guardrails enforced · sends stubbed (shadow mode).</div>
 </div>
+
+<!-- lead detail slide-over -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="dhead" id="dhead"></div>
+  <div class="dbody" id="dbody"></div>
+</aside>
 
 <script>
   // ---- tiny inline icon set (feather-style) ----
@@ -217,7 +232,7 @@
     layers:'<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
     filter:'<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>', refresh:'<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
     radio:'<circle cx="12" cy="12" r="2"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14M7.76 16.24a6 6 0 0 1 0-8.48M16.24 7.76a6 6 0 0 1 0 8.48M19.07 4.93a10 10 0 0 1 0 14.14"/>',
-    chevron:'<path d="m9 18 6-6-6-6"/>', mouse:'<rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 7v4"/>',
+    chevron:'<path d="m9 18 6-6-6-6"/>', mouse:'<path d="m3 3 7.5 18 2.1-7.4 7.4-2.1L3 3z"/>',
   };
   const svg = (n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
   const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -233,8 +248,6 @@
     document.getElementById("ic-live").innerHTML = svg("radio",15);
     document.getElementById("ic-funnel").innerHTML = svg("filter",15);
     document.getElementById("ic-leads").innerHTML = svg("users",15);
-    document.getElementById("ic-dec").innerHTML = svg("zap",15);
-    document.getElementById("ic-sent").innerHTML = svg("send",15);
   }
 
   const agoText = s => { if(!s) return ''; const d=Math.max(0,Math.round((Date.now()-new Date(s).getTime())/1000)); return d<60?d+"s ago":Math.round(d/60)+"m ago"; };
@@ -273,29 +286,63 @@
     const h=Math.floor(m/60); return h+'h'+((m%60)?' '+(m%60)+'m':'');
   };
   const clock = s => s ? esc(s).slice(11,16) : '';   // HH:MM from ISO
-  let openJourneyId = null;
+  let drawerLeadId = null;
+  const $drawer  = () => document.getElementById('drawer');
+  const $overlay = () => document.getElementById('overlay');
 
-  function collapseJourneys(){
-    document.querySelectorAll('tr.jrow').forEach(r=>r.remove());
+  function closeDrawer(){
+    drawerLeadId = null;
+    $drawer().classList.remove('show'); $overlay().classList.remove('show');
+    document.body.style.overflow = '';
     document.querySelectorAll('#leads tbody tr.open').forEach(r=>r.classList.remove('open'));
   }
-  function toggleJourney(id, tr){
-    const nxt = tr.nextElementSibling;
-    if(nxt && nxt.classList.contains('jrow')){ collapseJourneys(); openJourneyId=null; return; }
-    openJourney(id, tr);
+  async function openLeadDetail(id){
+    drawerLeadId = id;
+    document.querySelectorAll('#leads tbody tr.open').forEach(r=>r.classList.remove('open'));
+    const tr = document.querySelector('#leads tbody tr[data-lead-id="'+id+'"]'); if(tr) tr.classList.add('open');
+    $overlay().classList.add('show'); $drawer().classList.add('show'); document.body.style.overflow='hidden';
+    await fillDrawer(id);
   }
-  async function openJourney(id, tr){
-    collapseJourneys(); tr.classList.add('open'); openJourneyId=id;
-    const row=document.createElement('tr'); row.className='jrow';
-    row.innerHTML='<td colspan="7"><div class="journey" id="j-'+id+'">Loading journey…</div></td>';
-    tr.parentNode.insertBefore(row, tr.nextSibling);
-    try{ renderJourney(document.getElementById('j-'+id), await get('/api/lead/'+id+'/journey')); }
-    catch(e){ const b=document.getElementById('j-'+id); if(b) b.textContent='Could not load journey: '+e.message; }
+  function refreshDrawerIfOpen(){ if(drawerLeadId!=null) fillDrawer(drawerLeadId); }
+
+  async function fillDrawer(id){
+    const head=document.getElementById('dhead'), box=document.getElementById('dbody');
+    if(!box.dataset.lead || box.dataset.lead!=String(id)){ box.innerHTML='<div class="muted" style="padding:22px 0">Loading…</div>'; }
+    let j; try { j = await get('/api/lead/'+id+'/journey'); }
+    catch(e){ box.innerHTML='<div class="muted" style="padding:22px 0">Could not load: '+esc(e.message)+'</div>'; return; }
+    if(drawerLeadId!==id) return;                 // user switched/closed meanwhile
+    box.dataset.lead=String(id);
+    const s=j.summary, named=!!s.email, who = named?esc(s.email):('Anonymous #'+id);
+    head.innerHTML =
+      `<span class="av ${named?'':'anon'}">${named?esc(s.email[0].toUpperCase()):svg('user',15)}</span>`+
+      `<div style="min-width:0"><div class="dwho">${who}</div>`+
+      `<div class="dsub">${stageChip(s.funnel_stage)} ${meter(s.intent_score)}</div></div>`+
+      `<button class="dclose" onclick="closeDrawer()" aria-label="Close">${svg('x',16)}</button>`;
+    const dec=(window.__DEC||[]).filter(d=>d.lead_id===id);
+    const msg=(window.__SENT||[]).filter(m=>m.lead_id===id);
+    box.innerHTML =
+      `<div class="journey" id="dj"></div>`+
+      `<div class="dsection"><h3>Decisions · ${dec.length}</h3><div id="ddec"></div></div>`+
+      `<div class="dsection"><h3>Messages · ${msg.length}</h3><div id="dmsg"></div></div>`;
+    renderJourney(document.getElementById('dj'), j);
+    document.getElementById('ddec').innerHTML = dec.length ? dec.map(decCard).join('') : '<div class="muted small">No decisions yet.</div>';
+    document.getElementById('dmsg').innerHTML = msg.length ? msg.map(msgCard).join('') : '<div class="muted small">No messages — sends are stubbed in shadow mode.</div>';
   }
-  function reopenJourneyAfterRefresh(){
-    if(openJourneyId==null) return;
-    const tr=document.querySelector('#leads tbody tr[data-lead-id="'+openJourneyId+'"]');
-    if(tr) openJourney(openJourneyId, tr); else openJourneyId=null;
+  function decCard(d){
+    return `<div class="dcard"><div class="dcard-h">${actionChip(d.action)} ${statusChip(d.status)}`+
+      (d.channel?` <span class="chip">${esc(d.channel)}</span>`:'')+
+      `<span class="muted num" style="margin-left:auto">${ts(d.created_at)}</span></div>`+
+      (d.reasoning?`<div class="dcard-b">${esc(d.reasoning)}</div>`:'')+
+      `<div style="margin-top:9px">${guardrail(d.guardrail_result)}</div></div>`;
+  }
+  function msgCard(m){
+    const badge = `<span class="chip">${svg(m.channel==='email'?'mail':'chat',12)}${esc(m.channel)}</span>`;
+    const bodyHtml = m.status==='skipped'
+      ? `<div class="dcard-b"><span class="chip crit">${esc(m.skip_reason)}</span></div>`
+      : `<div class="dcard-b bubble">${esc(m.message)}</div>`;
+    return `<div class="dcard"><div class="dcard-h">${badge} ${statusChip(m.status)}`+
+      `<span class="muted num" style="margin-left:auto">${ts(m.created_at)}</span></div>`+
+      bodyHtml + (m.to_address?`<div class="muted small" style="margin-top:6px">to ${esc(m.to_address)}</div>`:'')+`</div>`;
   }
   function renderJourney(box, d){
     const s=d.summary;
@@ -388,7 +435,7 @@
       const av = anon ? `<span class="av anon">${svg('user',13)}</span>` : `<span class="av">${esc(l.email[0].toUpperCase())}</span>`;
       const who = anon ? `<span class="who anon">Anonymous #${l.id}</span>` : `<span class="who">${esc(l.email)}</span>`;
       const flag = l.scoring_error ? ` <span class="flag" title="${esc(l.scoring_error)}">⚠ flagged</span>` : "";
-      return `<tr data-lead-id="${l.id}" onclick="toggleJourney(${l.id}, this)">
+      return `<tr data-lead-id="${l.id}" onclick="openLeadDetail(${l.id})">
         <td><div class="lead"><span class="caret">${svg('chevron',12)}</span>${av}<div>${who}${flag}</div></div></td>
         <td>${stageChip(l.funnel_stage)}</td>
         <td>${meter(l.intent_score)}</td>
@@ -400,48 +447,27 @@
     }).join("") || `<tr><td class="empty" colspan="7">No leads yet — run replay.py → score.py.</td></tr>`;
   }
 
-  function renderDecisions(rows){
-    document.getElementById("dec-n").textContent = rows.length;
-    body("decisions").innerHTML = rows.map(d=>`<tr>
-        <td>${d.lead_email?esc(d.lead_email):`<span class="muted">#${d.lead_id}</span>`}</td>
-        <td>${actionChip(d.action)}</td>
-        <td>${statusChip(d.status)}</td>
-        <td>${d.channel?esc(d.channel):'<span class="muted">—</span>'}</td>
-        <td class="muted num">${ts(d.send_at)||'—'}</td>
-        <td class="top reason">${esc(d.reasoning)}</td>
-        <td class="top">${guardrail(d.guardrail_result)}</td>
-      </tr>`).join("") || `<tr><td class="empty" colspan="7">No decisions yet — run decide.py.</td></tr>`;
-  }
-
-  function renderSent(rows){
-    document.getElementById("sent-n").textContent = rows.length;
-    body("sent").innerHTML = rows.map(s=>`<tr>
-        <td>${s.lead_email?esc(s.lead_email):`<span class="muted">#${s.lead_id}</span>`}</td>
-        <td><span class="chip">${svg(s.channel==='email'?'mail':'chat',12)}${esc(s.channel)}</span><div class="muted" style="font-size:11px;margin-top:4px">${esc(s.sender_type)}</div></td>
-        <td class="num">${s.to_address?esc(s.to_address):'<span class="muted">—</span>'}</td>
-        <td>${statusChip(s.status)}</td>
-        <td class="top">${s.status==='skipped'?`<span class="chip crit">${esc(s.skip_reason)}</span>`:`<div class="bubble">${esc(s.message)}</div>`}</td>
-      </tr>`).join("") || `<tr><td class="empty" colspan="5">No sends yet — run execute.py.</td></tr>`;
-  }
-
   async function refresh(){
     const btn=document.getElementById("refresh"); btn.classList.add("spin"); setTimeout(()=>btn.classList.remove("spin"),600);
     try{
       const [L,D,S] = await Promise.all([get("/api/leads"),get("/api/decisions"),get("/api/sent-messages")]);
+      window.__DEC = D.decisions; window.__SENT = S.sent_messages;   // for the lead drawer
       renderKpis(L.leads,D.decisions,S.sent_messages);
       renderFunnel(L.leads);
-      renderLeads(L.leads); renderDecisions(D.decisions); renderSent(S.sent_messages);
-      reopenJourneyAfterRefresh();
+      renderLeads(L.leads);
+      refreshDrawerIfOpen();
       document.getElementById("updated").textContent = "updated "+new Date().toLocaleTimeString();
     }catch(e){
       document.getElementById("kpis").innerHTML = `<div class="tile" style="grid-column:1/-1;border-color:color-mix(in srgb,var(--crit) 40%,transparent)"><div class="k" style="color:var(--crit-t)">Error</div><div class="s">${esc(e.message)} — is the app running and the DB reachable?</div></div>`;
     }
   }
 
+  document.addEventListener('keydown', e => { if(e.key==='Escape') closeDrawer(); });
+
   fillIcons();
   refresh();
   refreshLive();
-  setInterval(refresh, 20000);      // leads / decisions / sent
+  setInterval(refresh, 20000);      // leads + summary data
   setInterval(refreshLive, 5000);   // live-now panel (faster cadence)
 </script>
 </body>
