@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS leads (
     site_id           TEXT NOT NULL DEFAULT 'default' REFERENCES sites(site_id),
 
     -- identity
+    name              TEXT,
     email             TEXT,
     phone             TEXT,
 
@@ -54,6 +55,9 @@ CREATE TABLE IF NOT EXISTS leads (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Backfill on pre-existing deployments (idempotent).
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS name TEXT;
 
 -- One lead per email/phone within a site (case-insensitive email).
 CREATE UNIQUE INDEX IF NOT EXISTS leads_site_email_uniq

@@ -80,6 +80,7 @@
     traits = traits || {};
     post('/identify', {
       anonymous_id: anonId(),
+      name: traits.name || null,
       email: traits.email || null,
       phone: traits.phone || null,
       email_opt_in: !!traits.email_opt_in,

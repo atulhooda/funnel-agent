@@ -48,6 +48,7 @@ async def identify(body: IdentifyRequest, site_id: str = Depends(get_site_id)) -
     result = await service.identify(
         site_id=site_id,
         anonymous_id=body.anonymous_id,
+        name=body.name,
         email=body.email,
         phone=body.phone,
         email_opt_in=body.email_opt_in,

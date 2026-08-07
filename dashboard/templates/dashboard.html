@@ -273,9 +273,10 @@
     document.getElementById("live-hint").textContent =
       rows.length ? `on the site now · updates every 5s` : `no one on the site right now · updates every 5s`;
     body("live").innerHTML = rows.map(v=>{
-      const named = !!v.email;
-      const who = named ? esc(v.email) : (v.lead_id ? `Lead #${v.lead_id}` : `Anonymous`);
-      const av = `<span class="av anon">${svg('user',13)}</span>`;
+      const label = v.name || v.email;
+      const named = !!label;
+      const who = named ? esc(label) : (v.lead_id ? `Lead #${v.lead_id}` : `Anonymous`);
+      const av = named ? `<span class="av">${esc(label[0].toUpperCase())}</span>` : `<span class="av anon">${svg('user',13)}</span>`;
       const loc = locText(v);
       return `<tr>
         <td><div class="lead">${av}<div><span class="who ${named?'':'anon'}">${who}</span></div></div></td>
@@ -327,11 +328,15 @@
     catch(e){ box.innerHTML='<div class="muted" style="padding:22px 0">Could not load: '+esc(e.message)+'</div>'; return; }
     if(drawerLeadId!==id) return;                 // user switched/closed meanwhile
     box.dataset.lead=String(id);
-    const s=j.summary, named=!!s.email, who = named?esc(s.email):('Anonymous #'+id);
+    const s=j.summary;
+    const label = s.name || s.email;
+    const named = !!label;
+    const who = named ? esc(label) : ('Anonymous #'+id);
+    const subEmail = (s.name && s.email) ? `<div class="muted small">${esc(s.email)}</div>` : '';
     const loc = locHtml(s);
     head.innerHTML =
-      `<span class="av ${named?'':'anon'}">${named?esc(s.email[0].toUpperCase()):svg('user',15)}</span>`+
-      `<div style="min-width:0"><div class="dwho">${who}</div>`+
+      `<span class="av ${named?'':'anon'}">${named?esc(label[0].toUpperCase()):svg('user',15)}</span>`+
+      `<div style="min-width:0"><div class="dwho">${who}</div>${subEmail}`+
       `<div class="dsub">${stageChip(s.funnel_stage)} ${meter(s.intent_score)}${loc?` ${loc}`:''}</div></div>`+
       `<button class="dclose" onclick="closeDrawer()" aria-label="Close">${svg('x',16)}</button>`;
     const dec=(window.__DEC||[]).filter(d=>d.lead_id===id);
@@ -447,13 +452,15 @@
   function renderLeads(rows){
     document.getElementById("leads-n").textContent = rows.length;
     body("leads").innerHTML = rows.map(l=>{
-      const anon=!l.email;
-      const av = anon ? `<span class="av anon">${svg('user',13)}</span>` : `<span class="av">${esc(l.email[0].toUpperCase())}</span>`;
-      const who = anon ? `<span class="who anon">Anonymous #${l.id}</span>` : `<span class="who">${esc(l.email)}</span>`;
+      const label = l.name || l.email;
+      const named = !!label;
+      const av = named ? `<span class="av">${esc(label[0].toUpperCase())}</span>` : `<span class="av anon">${svg('user',13)}</span>`;
+      const who = named ? `<span class="who">${esc(label)}</span>` : `<span class="who anon">Anonymous #${l.id}</span>`;
+      const subEmail = (l.name && l.email) ? `<div class="muted small" style="margin-top:2px">${esc(l.email)}</div>` : "";
       const flag = l.scoring_error ? ` <span class="flag" title="${esc(l.scoring_error)}">⚠ flagged</span>` : "";
       const loc = locHtml(l);
       return `<tr data-lead-id="${l.id}" onclick="openLeadDetail(${l.id})">
-        <td><div class="lead"><span class="caret">${svg('chevron',12)}</span>${av}<div>${who}${flag}${loc?`<div>${loc}</div>`:''}</div></div></td>
+        <td><div class="lead"><span class="caret">${svg('chevron',12)}</span>${av}<div>${who}${flag}${subEmail}${loc?`<div>${loc}</div>`:''}</div></div></td>
         <td>${stageChip(l.funnel_stage)}</td>
         <td>${meter(l.intent_score)}</td>
         <td><div class="consent">${cp(l.email_opt_in,'email')}${cp(l.whatsapp_opt_in,'wa')}</div></td>

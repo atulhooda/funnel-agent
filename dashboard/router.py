@@ -114,6 +114,7 @@ async def api_lead_journey(lead_id: int, site_id: str = Depends(get_site_id)) ->
         "summary": {
             "funnel_stage": lead.get("funnel_stage"),
             "intent_score": lead.get("intent_score"),
+            "name": lead.get("name"),
             "email": lead.get("email"),
             "country": location.get("country"),
             "region": location.get("region"),

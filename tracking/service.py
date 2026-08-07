@@ -131,6 +131,7 @@ async def identify(
     whatsapp_opt_in: bool,
     consent_timestamp: Optional[datetime],
     consent_source: Optional[str],
+    name: Optional[str] = None,
 ) -> dict:
     """Resolve the anonymous_id to a lead, refresh consent, backfill events.
 
@@ -164,6 +165,7 @@ async def identify(
                 whatsapp_opt_in=whatsapp_opt_in,
                 consent_timestamp=consent_ts,
                 consent_source=consent_source,
+                name=name,
             )
             if current_lead_id and current_lead_id != lead["id"]:
                 await repo.delete_lead_if_anonymous_orphan(
@@ -179,6 +181,7 @@ async def identify(
                 whatsapp_opt_in=whatsapp_opt_in,
                 consent_timestamp=consent_ts,
                 consent_source=consent_source,
+                name=name,
             )
         else:
             created = True
@@ -191,6 +194,7 @@ async def identify(
                 whatsapp_opt_in=whatsapp_opt_in,
                 consent_timestamp=consent_ts,
                 consent_source=consent_source,
+                name=name,
             )
 
         await repo.link_identity(cur, site_id, anonymous_id, lead["id"])

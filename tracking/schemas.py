@@ -26,6 +26,7 @@ class TrackResponse(BaseModel):
 
 class IdentifyRequest(BaseModel):
     anonymous_id: str
+    name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     email_opt_in: bool = False
