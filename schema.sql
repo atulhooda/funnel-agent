@@ -74,10 +74,21 @@ CREATE TABLE IF NOT EXISTS identities (
     site_id       TEXT NOT NULL DEFAULT 'default' REFERENCES sites(site_id),
     anonymous_id  TEXT NOT NULL,
     lead_id       BIGINT REFERENCES leads(id) ON DELETE SET NULL,
+    -- approximate geo, resolved once from the visitor's IP (raw IP is NOT stored);
+    -- timezone comes from the browser instantly as a fallback hint.
+    country       TEXT,
+    region        TEXT,
+    city          TEXT,
+    timezone      TEXT,
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (site_id, anonymous_id)
 );
+-- Backfill columns on pre-existing deployments (idempotent).
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS country  TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS region   TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS city     TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS timezone TEXT;
 CREATE INDEX IF NOT EXISTS identities_site_lead_idx ON identities (site_id, lead_id);
 
 -- ---------------------------------------------------------------------------

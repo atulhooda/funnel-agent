@@ -28,11 +28,47 @@ async def get_or_create_identity(cur, site_id: str, anonymous_id: str) -> dict:
         VALUES (%s, %s)
         ON CONFLICT (site_id, anonymous_id)
         DO UPDATE SET anonymous_id = EXCLUDED.anonymous_id
-        RETURNING id, site_id, anonymous_id, lead_id
+        RETURNING id, site_id, anonymous_id, lead_id, country, region, city, timezone
         """,
         (site_id, anonymous_id),
     )
     return await cur.fetchone()
+
+
+async def set_identity_geo(cur, site_id: str, anonymous_id: str, *, country, region, city) -> None:
+    """Store resolved IP geo (only fills columns that are still empty)."""
+    await cur.execute(
+        """
+        UPDATE identities
+           SET country = COALESCE(country, %s),
+               region  = COALESCE(region, %s),
+               city    = COALESCE(city, %s)
+         WHERE site_id = %s AND anonymous_id = %s
+        """,
+        (country, region, city, site_id, anonymous_id),
+    )
+
+
+async def set_identity_timezone(cur, site_id: str, anonymous_id: str, timezone: str) -> None:
+    await cur.execute(
+        "UPDATE identities SET timezone = COALESCE(timezone, %s) WHERE site_id = %s AND anonymous_id = %s",
+        (timezone, site_id, anonymous_id),
+    )
+
+
+async def lead_location(cur, site_id: str, lead_id: int) -> dict:
+    """Best available geo for a lead, taken from its most recently-seen identity."""
+    await cur.execute(
+        """
+        SELECT country, region, city, timezone
+        FROM identities
+        WHERE site_id = %s AND lead_id = %s
+          AND (country IS NOT NULL OR city IS NOT NULL OR timezone IS NOT NULL)
+        ORDER BY id DESC LIMIT 1
+        """,
+        (site_id, lead_id),
+    )
+    return (await cur.fetchone()) or {"country": None, "region": None, "city": None, "timezone": None}
 
 
 async def link_identity(cur, site_id: str, anonymous_id: str, lead_id: int) -> dict:
@@ -245,7 +281,8 @@ async def list_active_visitors(cur, site_id: str, since: datetime) -> list[dict]
     await cur.execute(
         """
         SELECT p.anonymous_id, p.url, p.page_type, p.last_seen_at,
-               i.lead_id, l.funnel_stage, l.intent_score, l.email
+               i.lead_id, i.country, i.region, i.city, i.timezone,
+               l.funnel_stage, l.intent_score, l.email
         FROM visitor_presence p
         LEFT JOIN identities i ON i.site_id = p.site_id AND i.anonymous_id = p.anonymous_id
         LEFT JOIN leads l      ON l.site_id = p.site_id AND l.id = i.lead_id
@@ -588,12 +625,20 @@ async def insert_sent_message(
 async def list_leads(cur, site_id: str) -> list[dict]:
     await cur.execute(
         """
-        SELECT id, email, phone, email_opt_in, whatsapp_opt_in, consent_source,
-               funnel_stage, intent_score, likely_objections, persona_signals,
-               scored_at, scoring_error, created_at
-        FROM leads
-        WHERE site_id = %s
-        ORDER BY intent_score DESC NULLS LAST, id
+        SELECT l.id, l.email, l.phone, l.email_opt_in, l.whatsapp_opt_in, l.consent_source,
+               l.funnel_stage, l.intent_score, l.likely_objections, l.persona_signals,
+               l.scored_at, l.scoring_error, l.created_at,
+               g.country, g.region, g.city, g.timezone
+        FROM leads l
+        LEFT JOIN LATERAL (
+            SELECT country, region, city, timezone
+            FROM identities i
+            WHERE i.site_id = l.site_id AND i.lead_id = l.id
+              AND (i.country IS NOT NULL OR i.city IS NOT NULL OR i.timezone IS NOT NULL)
+            ORDER BY i.id DESC LIMIT 1
+        ) g ON true
+        WHERE l.site_id = %s
+        ORDER BY l.intent_score DESC NULLS LAST, l.id
         """,
         (site_id,),
     )

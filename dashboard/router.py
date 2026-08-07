@@ -76,6 +76,7 @@ async def api_lead_journey(lead_id: int, site_id: str = Depends(get_site_id)) ->
             raise HTTPException(status_code=404, detail="lead not found")
         events = await repo.list_events_for_lead(cur, site_id, lead_id)
         last_presence = await repo.lead_last_presence(cur, site_id, lead_id)
+        location = await repo.lead_location(cur, site_id, lead_id)
 
     n = len(events)
     first = events[0]["occurred_at"] if events else None
@@ -114,6 +115,10 @@ async def api_lead_journey(lead_id: int, site_id: str = Depends(get_site_id)) ->
             "funnel_stage": lead.get("funnel_stage"),
             "intent_score": lead.get("intent_score"),
             "email": lead.get("email"),
+            "country": location.get("country"),
+            "region": location.get("region"),
+            "city": location.get("city"),
+            "timezone": location.get("timezone"),
             "events": n,
             "pageviews": len(pageviews),
             "clicks": len(clicks),

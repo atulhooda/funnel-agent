@@ -1,10 +1,11 @@
 """Layer 1 — HTTP routes: POST /track and POST /identify."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from deps import get_site_id, require_write_key
 from tracking import service
+from tracking.geo import client_ip_from_headers
 from tracking.schemas import (
     IdentifyRequest,
     IdentifyResponse,
@@ -16,7 +17,13 @@ router = APIRouter(tags=["tracking"])
 
 
 @router.post("/track", response_model=TrackResponse, dependencies=[Depends(require_write_key)])
-async def track(body: TrackRequest, site_id: str = Depends(get_site_id)) -> TrackResponse:
+async def track(body: TrackRequest, request: Request, site_id: str = Depends(get_site_id)) -> TrackResponse:
+    client_ip = client_ip_from_headers(
+        request.headers.get("x-forwarded-for"),
+        request.headers.get("x-real-ip"),
+        request.client.host if request.client else None,
+    )
+    client_tz = body.metadata.get("tz") if isinstance(body.metadata, dict) else None
     result = await service.track_event(
         site_id=site_id,
         event_type=body.event_type,
@@ -25,6 +32,8 @@ async def track(body: TrackRequest, site_id: str = Depends(get_site_id)) -> Trac
         anonymous_id=body.anonymous_id,
         session_id=body.session_id,
         metadata=body.metadata,
+        client_ip=client_ip,
+        client_tz=client_tz,
     )
     return TrackResponse(
         site_id=site_id,

@@ -47,6 +47,8 @@
     var q = new URLSearchParams(location.search), o = {};
     ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach(function (k) { if (q.get(k)) o[k] = q.get(k); });
     if (document.referrer) o.referrer = document.referrer;
+    try { o.tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) {}
+    if (navigator.language) o.lang = navigator.language;
     return o;
   }
 
