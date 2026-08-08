@@ -15,9 +15,12 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from config import loader
+from config.loader import effective_execution_mode, get_config
+from config.settings import get_settings
 from db import repositories as repo
 from db.connection import transaction
 from deps import get_site_id
@@ -26,6 +29,8 @@ router = APIRouter(tags=["dashboard"])
 _TPL_DIR = pathlib.Path(__file__).resolve().parent / "templates"
 TEMPLATE = _TPL_DIR / "dashboard.html"
 INSIGHTS_TEMPLATE = _TPL_DIR / "insights.html"
+MAP_TEMPLATE = _TPL_DIR / "map.html"
+SETTINGS_TEMPLATE = _TPL_DIR / "settings.html"
 
 LIVE_WINDOW_SECONDS = 24   # "live" if seen within this window (≈2.4× the 10s heartbeat, so no flicker)
 INSIGHTS_DAYS = 14         # trend window for the insights page
@@ -168,6 +173,131 @@ async def api_lead_journey(lead_id: int, site_id: str = Depends(get_site_id)) ->
             "top_pages": page_counts.most_common(8),
         },
         "timeline": timeline,
+    }
+
+
+@router.get("/map", response_class=HTMLResponse, include_in_schema=False)
+async def map_page() -> HTMLResponse:
+    return HTMLResponse(MAP_TEMPLATE.read_text(encoding="utf-8"))
+
+
+@router.get("/settings", response_class=HTMLResponse, include_in_schema=False)
+async def settings_page() -> HTMLResponse:
+    return HTMLResponse(SETTINGS_TEMPLATE.read_text(encoding="utf-8"))
+
+
+def _settings_view(site_id: str) -> dict:
+    g = get_config("guardrails", site_id)
+    rl = g.get("rate_limit", {})
+    sw = g.get("send_window", {})
+    pt = get_config("page_types", site_id)
+    s = get_settings()
+    return {
+        "execution_mode": effective_execution_mode(),
+        "guardrails": {
+            "timezone": g.get("timezone", "UTC"),
+            "max_outreach": rl.get("max_outreach", 2),
+            "window_days": rl.get("window_days", 7),
+            "send_start_hour": sw.get("start_hour", 9),
+            "send_end_hour": sw.get("end_hour", 21),
+        },
+        "scheduler": {"enabled": s.scheduler_enabled, "interval_seconds": s.scheduler_interval_seconds},
+        "page_types": {
+            "default_page_type": pt.get("default_page_type"),
+            "default_lean": pt.get("default_lean"),
+            "rules": pt.get("rules", []),
+        },
+    }
+
+
+@router.get("/api/settings")
+async def api_settings_get(site_id: str = Depends(get_site_id)) -> dict:
+    return _settings_view(site_id)
+
+
+def _clampi(v, lo, hi):
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="expected a whole number")
+    return max(lo, min(hi, n))
+
+
+@router.post("/api/settings")
+async def api_settings_post(body: dict = Body(...), site_id: str = Depends(get_site_id)) -> dict:
+    """Persist editable settings as DB overrides and apply them immediately."""
+    updates: dict[str, dict] = {}
+
+    em = body.get("execution_mode")
+    if em is not None:
+        if em not in ("shadow", "live"):
+            raise HTTPException(status_code=400, detail="execution_mode must be 'shadow' or 'live'")
+        updates["runtime"] = {"execution_mode": em}
+
+    g = body.get("guardrails") or {}
+    if g:
+        gov: dict = {}
+        tz = g.get("timezone")
+        if isinstance(tz, str) and tz.strip():
+            gov["timezone"] = tz.strip()
+        rl = {}
+        if "max_outreach" in g:
+            rl["max_outreach"] = _clampi(g["max_outreach"], 0, 50)
+        if "window_days" in g:
+            rl["window_days"] = _clampi(g["window_days"], 1, 365)
+        if rl:
+            gov["rate_limit"] = rl
+        sw = {}
+        if "send_start_hour" in g:
+            sw["start_hour"] = _clampi(g["send_start_hour"], 0, 23)
+        if "send_end_hour" in g:
+            sw["end_hour"] = _clampi(g["send_end_hour"], 1, 24)
+        if sw:
+            gov["send_window"] = sw
+        if gov:
+            updates["guardrails"] = gov
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="nothing to update")
+
+    async with transaction() as cur:
+        for key, partial in updates.items():
+            new_override = loader.merged_override(key, partial)
+            await repo.upsert_site_config(cur, site_id, key, new_override)
+            loader.set_override(key, new_override)
+
+    return _settings_view(site_id)
+
+
+@router.get("/api/map")
+async def api_map(site_id: str = Depends(get_site_id)) -> dict:
+    """Located visitors for the world map, each flagged live if seen very recently."""
+    now = datetime.now(timezone.utc)
+    live_cut = now - timedelta(seconds=LIVE_WINDOW_SECONDS)
+    async with transaction() as cur:
+        rows = await repo.list_map_visitors(cur, site_id)
+    visitors, live = [], 0
+    countries = set()
+    for r in rows:
+        is_live = r["last_seen_at"] is not None and r["last_seen_at"] > live_cut
+        if is_live:
+            live += 1
+        if r["country"]:
+            countries.add(r["country"])
+        visitors.append({
+            "lat": r["latitude"], "lng": r["longitude"],
+            "city": r["city"], "region": r["region"], "country": r["country"],
+            "funnel_stage": r["funnel_stage"], "intent_score": r["intent_score"],
+            "name": r["name"], "email": r["email"],
+            "last_seen_at": r["last_seen_at"].isoformat() if r["last_seen_at"] else None,
+            "live": is_live,
+        })
+    return {
+        "site_id": site_id,
+        "total": len(visitors),
+        "live": live,
+        "countries": len(countries),
+        "visitors": visitors,
     }
 
 

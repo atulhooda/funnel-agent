@@ -7,6 +7,7 @@ from the `site_config` DB table can be merged in later without changing callers.
 """
 from __future__ import annotations
 
+import copy
 import functools
 import pathlib
 from typing import Optional
@@ -15,6 +16,11 @@ from urllib.parse import urlparse
 import yaml
 
 CONFIG_DIR = pathlib.Path(__file__).resolve().parent
+
+# In-process config overrides layered on top of the YAML files. Populated from
+# the site_config DB table at startup and whenever the Settings page saves, so
+# edits take effect without a redeploy. Single Railway replica => one source.
+_overrides: dict[str, dict] = {}
 
 
 @functools.lru_cache(maxsize=None)
@@ -26,13 +32,46 @@ def _load_yaml(name: str) -> dict:
         return yaml.safe_load(fh) or {}
 
 
-def get_config(name: str, site_id: str = "default") -> dict:
-    """Return a named config block (e.g. 'page_types').
+def _deep_merge(base: dict, over: dict) -> dict:
+    out = copy.deepcopy(base)
+    for k, v in (over or {}).items():
+        if isinstance(out.get(k), dict) and isinstance(v, dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = copy.deepcopy(v)
+    return out
 
-    `site_id` is accepted now so per-site DB overrides can be layered on later
-    without touching any caller.
-    """
-    return _load_yaml(name)
+
+def get_config(name: str, site_id: str = "default") -> dict:
+    """Return a named config block (e.g. 'page_types'), with any DB override merged in."""
+    base = _load_yaml(name)
+    override = _overrides.get(name)
+    return _deep_merge(base, override) if override else copy.deepcopy(base)
+
+
+def set_override(name: str, value: Optional[dict]) -> None:
+    """Set (or clear) the in-process override for a config block."""
+    if value:
+        _overrides[name] = value
+    else:
+        _overrides.pop(name, None)
+
+
+def all_overrides() -> dict:
+    return copy.deepcopy(_overrides)
+
+
+def merged_override(name: str, partial: dict) -> dict:
+    """Deep-merge a partial edit into the existing override for `name` (returns new)."""
+    return _deep_merge(_overrides.get(name, {}), partial or {})
+
+
+def effective_execution_mode() -> str:
+    """shadow|live — a saved runtime override wins over the env default."""
+    from config.settings import get_settings
+    rt = _overrides.get("runtime") or {}
+    mode = rt.get("execution_mode")
+    return mode if mode in ("shadow", "live") else get_settings().execution_mode
 
 
 # --- page-type classification (config-driven; Layer 2 reads the same rules) ---

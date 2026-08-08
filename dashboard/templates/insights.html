@@ -105,6 +105,8 @@
     <nav class="side-nav">
       <a class="nav-item" href="/dashboard"><span id="ic-ov"></span> Overview</a>
       <a class="nav-item active" href="/insights"><span id="ic-in"></span> Insights</a>
+      <a class="nav-item" href="/map"><span id="ic-mp"></span> Live map</a>
+      <a class="nav-item" href="/settings"><span id="ic-se"></span> Settings</a>
     </nav>
     <div class="side-foot"><span class="dot"></span> ENGAGEO</div>
   </aside>
@@ -154,6 +156,8 @@
     layers:'<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
     list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     spark:'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+    globe:'<circle cx="12" cy="12" r="9"/><path d="M2 12h20"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/>',
+    sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
   };
   const svg = (n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
   const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -166,6 +170,8 @@
     document.getElementById("logo").innerHTML = svg("spark",14);
     document.getElementById("ic-ov").innerHTML = svg("grid",16);
     document.getElementById("ic-in").innerHTML = svg("bars",16);
+    document.getElementById("ic-mp").innerHTML = svg("globe",16);
+    document.getElementById("ic-se").innerHTML = svg("sliders",16);
     document.getElementById("ic-trend").innerHTML = svg("trend",15);
     document.getElementById("ic-top").innerHTML = svg("eye",15);
     document.getElementById("ic-type").innerHTML = svg("layers",15);

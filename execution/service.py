@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from config.loader import get_config
+from config.loader import effective_execution_mode, get_config
 from config.settings import get_settings
 from db import repositories as repo
 from db.connection import transaction
@@ -49,7 +49,7 @@ async def execute_decision(site_id: str, decision_id: int) -> Optional[dict]:
     consent_field = channel_consent.get(channel)
     contact_field = CHANNEL_CONTACT.get(channel)
     to_address = lead.get(contact_field) if (lead and contact_field) else None
-    mode = get_settings().execution_mode
+    mode = effective_execution_mode()
     sender = get_sender(channel, mode)
 
     # --- consent re-check at SEND time (defense in depth beyond the guardrail) ---

@@ -201,6 +201,8 @@
     <nav class="side-nav">
       <a class="nav-item active" href="/dashboard"><span id="ic-ov"></span> Overview</a>
       <a class="nav-item" href="/insights"><span id="ic-in"></span> Insights</a>
+      <a class="nav-item" href="/map"><span id="ic-mp"></span> Live map</a>
+      <a class="nav-item" href="/settings"><span id="ic-se"></span> Settings</a>
     </nav>
     <div class="side-foot"><span class="dot"></span> ENGAGEO</div>
   </aside>
@@ -269,6 +271,8 @@
     grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     bars:'<path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="14" width="3" height="3" rx="1"/>',
     spark:'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+    globe:'<circle cx="12" cy="12" r="9"/><path d="M2 12h20"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/>',
+    sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
   };
   const svg = (n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
   const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -283,6 +287,8 @@
     document.getElementById("logo").innerHTML = svg("spark",14);
     document.getElementById("ic-ov").innerHTML = svg("grid",16);
     document.getElementById("ic-in").innerHTML = svg("bars",16);
+    document.getElementById("ic-mp").innerHTML = svg("globe",16);
+    document.getElementById("ic-se").innerHTML = svg("sliders",16);
     document.getElementById("refic").innerHTML = svg("refresh",15);
     document.getElementById("ic-live").innerHTML = svg("radio",15);
     document.getElementById("ic-funnel").innerHTML = svg("filter",15);

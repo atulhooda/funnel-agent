@@ -37,14 +37,17 @@ async def lookup_ip(ip: str) -> Optional[dict]:
     url = f"https://ipwho.is/{ip}"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(url, params={"fields": "success,country,region,city"})
+            resp = await client.get(url, params={"fields": "success,country,region,city,latitude,longitude"})
         data = resp.json()
     except Exception:
         return None
     if not isinstance(data, dict) or not data.get("success"):
         return None
+    lat, lng = data.get("latitude"), data.get("longitude")
     return {
         "country": data.get("country") or None,
         "region": data.get("region") or None,
         "city": data.get("city") or None,
+        "lat": lat if isinstance(lat, (int, float)) else None,
+        "lng": lng if isinstance(lng, (int, float)) else None,
     }

@@ -35,17 +35,19 @@ async def get_or_create_identity(cur, site_id: str, anonymous_id: str) -> dict:
     return await cur.fetchone()
 
 
-async def set_identity_geo(cur, site_id: str, anonymous_id: str, *, country, region, city) -> None:
+async def set_identity_geo(cur, site_id: str, anonymous_id: str, *, country, region, city, lat=None, lng=None) -> None:
     """Store resolved IP geo (only fills columns that are still empty)."""
     await cur.execute(
         """
         UPDATE identities
-           SET country = COALESCE(country, %s),
-               region  = COALESCE(region, %s),
-               city    = COALESCE(city, %s)
+           SET country   = COALESCE(country, %s),
+               region    = COALESCE(region, %s),
+               city      = COALESCE(city, %s),
+               latitude  = COALESCE(latitude, %s),
+               longitude = COALESCE(longitude, %s)
          WHERE site_id = %s AND anonymous_id = %s
         """,
-        (country, region, city, site_id, anonymous_id),
+        (country, region, city, lat, lng, site_id, anonymous_id),
     )
 
 
@@ -352,6 +354,41 @@ async def views_by_day(cur, site_id: str, days: int) -> list[dict]:
         ORDER BY 1
         """,
         (site_id, days),
+    )
+    return await cur.fetchall()
+
+
+async def get_site_config(cur, site_id: str) -> dict:
+    """All DB config overrides for a site, as {key: value}."""
+    await cur.execute("SELECT key, value FROM site_config WHERE site_id = %s", (site_id,))
+    return {r["key"]: r["value"] for r in await cur.fetchall()}
+
+
+async def upsert_site_config(cur, site_id: str, key: str, value) -> None:
+    await cur.execute(
+        """
+        INSERT INTO site_config (site_id, key, value) VALUES (%s, %s, %s)
+        ON CONFLICT (site_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+        """,
+        (site_id, key, Jsonb(value or {})),
+    )
+
+
+async def list_map_visitors(cur, site_id: str, limit: int = 1000) -> list[dict]:
+    """Visitors that have a geo fix (lat/lng), newest-seen first — for the world map."""
+    await cur.execute(
+        """
+        SELECT p.anonymous_id, p.last_seen_at, p.url, p.page_type,
+               i.city, i.region, i.country, i.latitude, i.longitude,
+               l.funnel_stage, l.intent_score, l.name, l.email
+        FROM visitor_presence p
+        JOIN identities i ON i.site_id = p.site_id AND i.anonymous_id = p.anonymous_id
+        LEFT JOIN leads l ON l.site_id = p.site_id AND l.id = i.lead_id
+        WHERE p.site_id = %s AND i.latitude IS NOT NULL AND i.longitude IS NOT NULL
+        ORDER BY p.last_seen_at DESC
+        LIMIT %s
+        """,
+        (site_id, limit),
     )
     return await cur.fetchall()
 

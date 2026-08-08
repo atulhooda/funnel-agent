@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Funnel Agent · Settings</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg:#f6f1e6; --surface:#fffdf7; --surface-2:#f1ead9; --hover:rgba(120,90,30,.05);
+      --ink:#332f27; --ink-2:#5f584b; --muted:#9a9081;
+      --grid:#e8e0cd; --line:#e6ddc8; --border:rgba(70,55,25,.15); --border-2:rgba(70,55,25,.075);
+      --amber:#c8892c; --amber-d:#b07620; --amber-l:#e3b45f; --link:#9a6410; --good:#4a8f52; --good-t:#3c7a43; --crit:#c24a33;
+      --shadow:0 1px 2px rgba(80,60,25,.05), 0 2px 7px rgba(80,60,25,.045);
+      --r:14px;
+    }
+    * { box-sizing:border-box; } html,body { margin:0; }
+    body { background:radial-gradient(1150px 440px at 82% -12%, rgba(214,168,72,.20), transparent 62%), var(--bg);
+      background-attachment:fixed; color:var(--ink); font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+    svg { display:block; }
+    .shell { display:flex; min-height:100vh; }
+    .sidebar { width:224px; flex:none; border-right:1px solid var(--border); background:var(--surface); padding:22px 14px; position:sticky; top:0; height:100vh; display:flex; flex-direction:column; }
+    .side-brand { display:flex; align-items:center; gap:9px; font-weight:660; font-size:15px; letter-spacing:-.01em; padding:2px 8px 20px; }
+    .side-logo { width:26px; height:26px; border-radius:8px; background:linear-gradient(180deg,var(--amber-l),var(--amber-d)); display:flex; align-items:center; justify-content:center; color:#fff; }
+    .side-nav { display:flex; flex-direction:column; gap:3px; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:9px; color:var(--ink-2); text-decoration:none; font-size:13.5px; font-weight:520; }
+    .nav-item:hover { background:var(--hover); color:var(--ink); }
+    .nav-item.active { background:color-mix(in srgb,var(--amber) 15%,transparent); color:var(--link); font-weight:600; }
+    .nav-item svg { width:16px; height:16px; opacity:.9; }
+    .side-foot { margin-top:auto; padding:10px 11px 2px; color:var(--muted); font-size:11.5px; display:flex; align-items:center; gap:7px; }
+    .dot { width:7px; height:7px; border-radius:50%; background:var(--good); }
+    @media (max-width:760px){ .shell{ flex-direction:column; } .sidebar{ width:auto; height:auto; position:static; flex-direction:row; align-items:center; padding:12px 14px; } .side-brand{padding:0} .side-nav{flex-direction:row; margin-left:8px} .side-foot{margin-left:auto} }
+
+    .app { flex:1; min-width:0; max-width:820px; margin:0 auto; padding:30px 30px 90px; }
+    .top { margin-bottom:22px; }
+    .top h1 { margin:0; font-size:21px; font-weight:640; letter-spacing:-.02em; }
+    .top .sub { margin-top:6px; color:var(--muted); font-size:12.5px; }
+
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); margin-top:20px; box-shadow:var(--shadow); overflow:hidden; }
+    .card > h2 { margin:0; padding:14px 18px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--border); font-size:12px; font-weight:650; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-2); }
+    .card .pad { padding:18px; }
+    .field { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:12px 0; border-top:1px solid var(--border-2); }
+    .field:first-child { border-top:none; padding-top:2px; }
+    .field .lab { font-size:13.5px; font-weight:550; }
+    .field .desc { font-size:12px; color:var(--muted); margin-top:2px; }
+    .field .ctl { flex:none; }
+    input[type=number], input[type=text] { font:inherit; font-size:13.5px; padding:8px 10px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--ink); width:120px; }
+    input[type=text]{ width:180px; }
+    input:focus { outline:none; border-color:var(--amber); box-shadow:0 0 0 3px color-mix(in srgb,var(--amber) 18%,transparent); }
+    .hours { display:flex; align-items:center; gap:8px; }
+    .hours input{ width:70px; } .hours .to{ color:var(--muted); font-size:12px; }
+
+    /* segmented toggle */
+    .seg { display:inline-flex; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:3px; gap:3px; }
+    .seg button { font:inherit; font-size:13px; font-weight:600; border:none; background:transparent; color:var(--ink-2); padding:7px 16px; border-radius:7px; cursor:pointer; }
+    .seg button.on { background:var(--surface); box-shadow:var(--shadow); color:var(--ink); }
+    .seg button.on.live { color:#fff8ec; background:var(--crit); }
+    .warn { margin-top:14px; font-size:12.5px; color:#8a3b28; background:color-mix(in srgb,var(--crit) 12%,transparent); border:1px solid color-mix(in srgb,var(--crit) 30%,transparent); border-radius:10px; padding:10px 12px; display:none; }
+    .warn.show { display:block; }
+
+    .savebar { position:sticky; bottom:0; margin-top:22px; display:flex; align-items:center; gap:14px; justify-content:flex-end;
+      background:linear-gradient(0deg,var(--bg) 60%,transparent); padding:14px 0 6px; }
+    .btn { display:inline-flex; align-items:center; gap:8px; font:inherit; font-size:13.5px; font-weight:600; border:1px solid var(--amber-d); background:linear-gradient(180deg,var(--amber-l),var(--amber)); color:#40260a; padding:9px 18px; border-radius:10px; cursor:pointer; }
+    .btn:disabled { opacity:.5; cursor:default; }
+    .status { font-size:12.5px; color:var(--muted); } .status.ok{ color:var(--good-t); } .status.err{ color:var(--crit); }
+
+    .chip { display:inline-flex; align-items:center; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); color:var(--ink-2); }
+    table { width:100%; border-collapse:collapse; font-size:13px; } th,td { text-align:left; padding:9px 18px; border-top:1px solid var(--border-2); }
+    th { font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:600; border-top:none; }
+    .ro { font-size:12px; color:var(--muted); }
+    code { background:var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:1px 5px; font-size:12px; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="side-brand"><span class="side-logo" id="logo"></span> Funnel Agent</div>
+    <nav class="side-nav">
+      <a class="nav-item" href="/dashboard"><span id="ic-ov"></span> Overview</a>
+      <a class="nav-item" href="/insights"><span id="ic-in"></span> Insights</a>
+      <a class="nav-item" href="/map"><span id="ic-mp"></span> Live map</a>
+      <a class="nav-item active" href="/settings"><span id="ic-se"></span> Settings</a>
+    </nav>
+    <div class="side-foot"><span class="dot"></span> ENGAGEO</div>
+  </aside>
+
+  <main class="app">
+    <div class="top"><h1>Settings &amp; rules</h1><div class="sub">Tune the decision brain — changes save to the database and apply immediately, no redeploy.</div></div>
+
+    <div class="card">
+      <h2><span id="ic-exec"></span> Execution</h2>
+      <div class="pad">
+        <div class="field">
+          <div><div class="lab">Sending mode</div><div class="desc">Shadow logs would-be messages without sending. Live actually delivers via configured senders.</div></div>
+          <div class="ctl"><div class="seg" id="mode">
+            <button data-v="shadow" onclick="setMode('shadow')">Shadow</button>
+            <button data-v="live" class="live" onclick="setMode('live')">Live</button>
+          </div></div>
+        </div>
+        <div class="warn" id="livewarn">⚠ <b>Live</b> mode will send real messages to leads who have consent. Make sure your senders (email / WhatsApp) are configured and you have opt-in — otherwise keep Shadow.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span id="ic-guard"></span> Guardrails</h2>
+      <div class="pad">
+        <div class="field">
+          <div><div class="lab">Max outreach per lead</div><div class="desc">Cap on outreach messages to one lead within the window below.</div></div>
+          <div class="ctl"><input type="number" id="max_outreach" min="0" max="50"></div>
+        </div>
+        <div class="field">
+          <div><div class="lab">Rate-limit window</div><div class="desc">Rolling window (days) the cap is measured over.</div></div>
+          <div class="ctl"><input type="number" id="window_days" min="1" max="365"></div>
+        </div>
+        <div class="field">
+          <div><div class="lab">Send window</div><div class="desc">Sends are only allowed between these local hours (24h).</div></div>
+          <div class="ctl hours"><input type="number" id="send_start_hour" min="0" max="23"><span class="to">to</span><input type="number" id="send_end_hour" min="1" max="24"></div>
+        </div>
+        <div class="field">
+          <div><div class="lab">Timezone</div><div class="desc">Used to evaluate the send window (e.g. <code>Asia/Kolkata</code>, <code>UTC</code>).</div></div>
+          <div class="ctl"><input type="text" id="timezone" placeholder="UTC"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span id="ic-auto"></span> Automation</h2>
+      <div class="pad">
+        <div class="field"><div><div class="lab">Scheduler</div><div class="desc ro" id="sched-desc">—</div></div>
+          <div class="ctl"><span class="chip" id="sched-chip">—</span></div></div>
+        <div class="desc ro" style="margin-top:8px">Scheduler cadence is set via environment variables (redeploy to change).</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span id="ic-pt"></span> Page-type rules <span class="ro" style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500">read-only</span></h2>
+      <div style="overflow-x:auto"><table id="pt"><thead><tr><th>Page type</th><th>Funnel lean</th><th>Matches path contains</th></tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="savebar">
+      <span class="status" id="status"></span>
+      <button class="btn" id="save" onclick="save()">Save changes</button>
+    </div>
+  </main>
+</div>
+
+<script>
+  const P = {
+    grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    bars:'<path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="14" width="3" height="3" rx="1"/>',
+    globe:'<circle cx="12" cy="12" r="9"/><path d="M2 12h20"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/>',
+    sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+    spark:'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+    send:'<path d="m22 2-7 20-4-9-9-4 20-7z"/>', shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', layers:'<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+  };
+  const svg=(n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
+  const esc=s=>(s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const get=async p=>{const r=await fetch(p); if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail||("HTTP "+r.status)); return r.json();};
+  let MODE="shadow";
+
+  function icons(){
+    document.getElementById("logo").innerHTML=svg("spark",14);
+    document.getElementById("ic-ov").innerHTML=svg("grid",16);
+    document.getElementById("ic-in").innerHTML=svg("bars",16);
+    document.getElementById("ic-mp").innerHTML=svg("globe",16);
+    document.getElementById("ic-se").innerHTML=svg("sliders",16);
+    document.getElementById("ic-exec").innerHTML=svg("send",15);
+    document.getElementById("ic-guard").innerHTML=svg("shield",15);
+    document.getElementById("ic-auto").innerHTML=svg("clock",15);
+    document.getElementById("ic-pt").innerHTML=svg("layers",15);
+  }
+  function setMode(m){
+    MODE=m;
+    document.querySelectorAll("#mode button").forEach(b=>b.classList.toggle("on", b.dataset.v===m));
+    document.getElementById("livewarn").classList.toggle("show", m==="live");
+  }
+  function apply(d){
+    setMode(d.execution_mode);
+    const g=d.guardrails;
+    document.getElementById("max_outreach").value=g.max_outreach;
+    document.getElementById("window_days").value=g.window_days;
+    document.getElementById("send_start_hour").value=g.send_start_hour;
+    document.getElementById("send_end_hour").value=g.send_end_hour;
+    document.getElementById("timezone").value=g.timezone;
+    const s=d.scheduler;
+    document.getElementById("sched-chip").textContent = s.enabled ? "on" : "off";
+    document.getElementById("sched-desc").textContent = `Runs the score → decide → execute loop every ${s.interval_seconds}s`;
+    const pt=d.page_types;
+    document.querySelector("#pt tbody").innerHTML = (pt.rules||[]).map(r=>
+      `<tr><td><span class="chip">${esc(r.page_type)}</span></td><td>${esc(r.lean||'—')}</td><td class="ro">${(r.match_any||[]).map(esc).join(", ")}</td></tr>`).join("")
+      + `<tr><td class="ro">default</td><td class="ro">${esc(pt.default_lean||'—')}</td><td class="ro">everything else → <b>${esc(pt.default_page_type||'other')}</b></td></tr>`;
+  }
+  function collect(){
+    return { execution_mode: MODE, guardrails: {
+      max_outreach: +document.getElementById("max_outreach").value,
+      window_days: +document.getElementById("window_days").value,
+      send_start_hour: +document.getElementById("send_start_hour").value,
+      send_end_hour: +document.getElementById("send_end_hour").value,
+      timezone: document.getElementById("timezone").value.trim() || "UTC",
+    }};
+  }
+  function setStatus(msg, cls){ const s=document.getElementById("status"); s.textContent=msg; s.className="status "+(cls||""); }
+  async function save(){
+    const btn=document.getElementById("save"); btn.disabled=true; setStatus("Saving…","");
+    try{
+      const r=await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collect())});
+      if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail||("HTTP "+r.status));
+      apply(await r.json()); setStatus("Saved · applied live ✓","ok");
+    }catch(e){ setStatus("Couldn’t save: "+e.message,"err"); }
+    finally{ btn.disabled=false; setTimeout(()=>{ if(document.getElementById("status").classList.contains("ok")) setStatus("",""); },3000); }
+  }
+  async function load(){ try{ apply(await get("/api/settings")); }catch(e){ setStatus("Couldn’t load: "+e.message,"err"); } }
+  icons(); load();
+</script>
+</body>
+</html>

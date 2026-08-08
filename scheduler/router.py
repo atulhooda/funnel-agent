@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from config.loader import effective_execution_mode
 from config.settings import get_settings
 from scheduler import loop
 
@@ -22,6 +23,6 @@ async def status() -> dict:
         "enabled": settings.scheduler_enabled,
         "interval_seconds": settings.scheduler_interval_seconds,
         "running": loop.is_running(),
-        "execution_mode": settings.execution_mode,
+        "execution_mode": effective_execution_mode(),
         "last_cycle": loop.last_cycle(),
     }

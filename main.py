@@ -16,9 +16,11 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from config import loader
 from config.settings import get_settings
 from dashboard.router import router as dashboard_router
-from db.connection import close_pool, ensure_schema, open_pool
+from db import repositories as repo
+from db.connection import close_pool, ensure_schema, open_pool, transaction
 from decision.router import router as decision_router
 from deps import require_admin
 from execution.router import router as execution_router
@@ -30,12 +32,24 @@ from tracking.router import router as tracking_router
 STATIC = pathlib.Path(__file__).resolve().parent / "static"
 
 
+async def _load_config_overrides() -> None:
+    """Read saved config overrides from site_config into the in-process loader."""
+    try:
+        async with transaction() as cur:
+            rows = await repo.get_site_config(cur, get_settings().site_id)
+        for key, value in rows.items():
+            loader.set_override(key, value)
+    except Exception as exc:  # never block startup on config load
+        print(f"[config] could not load overrides: {exc!r}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Apply the schema first (also waits for the DB to come up), then open the pool.
     if get_settings().run_schema_on_startup:
         await ensure_schema()
     await open_pool()
+    await _load_config_overrides()  # apply saved Settings edits over the file config
     scheduler.start()  # autonomous score -> decide -> execute loop (if enabled)
     try:
         yield
@@ -77,6 +91,16 @@ async def health() -> dict:
 async def track_js() -> FileResponse:
     """The browser tracking snippet — add to your site with a <script src> tag."""
     return FileResponse(STATIC / "track.js", media_type="application/javascript")
+
+
+@app.get("/world.js", include_in_schema=False)
+async def world_js() -> FileResponse:
+    """Equirectangular world land path (window.WORLD_LAND) for the live map page."""
+    return FileResponse(
+        STATIC / "world.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/demo", include_in_schema=False)

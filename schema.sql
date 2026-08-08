@@ -84,15 +84,19 @@ CREATE TABLE IF NOT EXISTS identities (
     region        TEXT,
     city          TEXT,
     timezone      TEXT,
+    latitude      DOUBLE PRECISION,
+    longitude     DOUBLE PRECISION,
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (site_id, anonymous_id)
 );
 -- Backfill columns on pre-existing deployments (idempotent).
-ALTER TABLE identities ADD COLUMN IF NOT EXISTS country  TEXT;
-ALTER TABLE identities ADD COLUMN IF NOT EXISTS region   TEXT;
-ALTER TABLE identities ADD COLUMN IF NOT EXISTS city     TEXT;
-ALTER TABLE identities ADD COLUMN IF NOT EXISTS timezone TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS country   TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS region    TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS city      TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS timezone  TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS latitude  DOUBLE PRECISION;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
 CREATE INDEX IF NOT EXISTS identities_site_lead_idx ON identities (site_id, lead_id);
 
 -- ---------------------------------------------------------------------------

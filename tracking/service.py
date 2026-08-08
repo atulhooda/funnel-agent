@@ -34,6 +34,7 @@ async def _resolve_geo(site_id: str, anonymous_id: str, ip: str) -> None:
             await repo.set_identity_geo(
                 cur, site_id, anonymous_id,
                 country=loc["country"], region=loc["region"], city=loc["city"],
+                lat=loc.get("lat"), lng=loc.get("lng"),
             )
     except Exception:
         pass  # geo is optional; never surface ingestion errors
