@@ -277,6 +277,16 @@ def apply_gates(stage: Optional[str], features: dict, site_id: str = "default") 
     """
     if stage is None or not enabled(site_id):
         return stage, None
+
+    # A gate asks "was enough time spent to deserve this stage?" — that question
+    # is only answerable when time was measured at all. Leads scored before dwell
+    # tracking existed, or visitors still running a cached copy of the old
+    # snippet, report zero seconds for every visit; gating them would downgrade
+    # the entire back catalogue to TOFU. Absence of evidence is not evidence of
+    # absence, so the model's stage stands until real measurements arrive.
+    if not (features.get("engagement") or {}).get("measured_visits"):
+        return stage, "not gated: no engagement measurements for this lead yet"
+
     gates = config_for(site_id).get("gates") or {}
     metrics = _gate_metrics(features)
     original = stage

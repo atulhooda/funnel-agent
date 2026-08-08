@@ -89,8 +89,17 @@ async def health() -> dict:
 
 @app.get("/track.js", include_in_schema=False)
 async def track_js() -> FileResponse:
-    """The browser tracking snippet — add to your site with a <script src> tag."""
-    return FileResponse(STATIC / "track.js", media_type="application/javascript")
+    """The browser tracking snippet — add to your site with a <script src> tag.
+
+    Cached for five minutes only. Without an explicit header the browser picks a
+    heuristic lifetime, and a stale snippet keeps reporting page views with no
+    engagement data — visitors who look like they never stayed anywhere.
+    """
+    return FileResponse(
+        STATIC / "track.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 @app.get("/world.js", include_in_schema=False)
