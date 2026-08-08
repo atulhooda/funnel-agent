@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Funnel Agent · Live map</title>
+  <!-- Leaflet (BSD-2), vendored locally — no CDN dependency. -->
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
   <style>
     :root {
       color-scheme: light;
@@ -52,15 +54,48 @@
     .legend { margin-left:auto; display:flex; gap:14px; font-size:11px; color:var(--muted); font-weight:500; letter-spacing:0; text-transform:none; }
     .legend b { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:middle; }
 
-    .mapwrap { position:relative; padding:10px 12px 6px; }
-    .worldmap { width:100%; height:auto; }
-    .ocean { fill:var(--ocean); }
-    .land { fill:var(--land); stroke:#d3bf8f; stroke-width:.4; stroke-linejoin:round; }
-    .d-dot { fill:var(--amber-d); opacity:.6; }
-    .d-live { fill:var(--amber); stroke:#fff8ec; stroke-width:1; }
+    .mapwrap { position:relative; }
+    #map { width:100%; height:min(62vh, 560px); background:var(--ocean); }
+    /* OpenStreetMap's default raster styling is bright blue-grey and fights the
+       cream palette; warming and desaturating the tile pane blends it in without
+       needing a paid basemap. */
+    .leaflet-tile-pane { filter:sepia(.55) saturate(.78) brightness(1.02) contrast(.92) hue-rotate(-6deg); }
+    .leaflet-container { font:inherit; background:var(--ocean); }
+    .leaflet-control-attribution { background:rgba(255,253,247,.82) !important; font-size:10.5px; color:var(--muted); }
+    .leaflet-control-attribution a { color:var(--link); }
+    .leaflet-bar a { color:var(--ink-2) !important; background:var(--surface) !important; border-color:var(--border) !important; }
+    .leaflet-bar a:hover { background:var(--surface-2) !important; }
+
+    /* markers: a plain dot for past visitors, a pulsing one for live */
+    .mk-dot { width:11px; height:11px; border-radius:50%; background:var(--amber-d); opacity:.75;
+              border:1.5px solid #fff8ec; box-shadow:0 1px 3px rgba(80,60,25,.3); }
+    .mk-live { width:13px; height:13px; border-radius:50%; background:var(--amber);
+               border:2px solid #fff8ec; box-shadow:0 1px 4px rgba(80,60,25,.35); position:relative; }
+    .mk-live::after { content:""; position:absolute; inset:-4px; border-radius:50%;
+                      border:2px solid var(--amber); animation:ping 1.9s ease-out infinite; }
+    @keyframes ping { 0%{transform:scale(.6);opacity:.75} 100%{transform:scale(2.4);opacity:0} }
+    .leaflet-marker-icon.mk { background:none; border:none; }
+
+    /* fallback world drawn only when tiles can't be fetched */
+    .fallback { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+                background:var(--ocean); z-index:400; }
+    .fallback.show { display:flex; }
+    .fallback svg { width:100%; height:100%; }
+    .fallback .ocean { fill:var(--ocean); } .fallback .land { fill:var(--land); stroke:#d3bf8f; stroke-width:.4; }
+    .offline { position:absolute; left:12px; bottom:12px; z-index:500; display:none;
+               background:var(--surface); border:1px solid var(--border); border-radius:9px;
+               padding:7px 11px; font-size:11.5px; color:var(--ink-2); box-shadow:var(--shadow); }
+    .offline.show { display:block; }
+    .mapbtn { position:absolute; right:12px; top:12px; z-index:500; display:inline-flex; align-items:center; gap:6px;
+              font:inherit; font-size:12px; font-weight:600; background:var(--surface); color:var(--ink-2);
+              border:1px solid var(--border); border-radius:9px; padding:6px 11px; cursor:pointer; box-shadow:var(--shadow); }
+    .mapbtn:hover { background:var(--surface-2); }
     .mk { cursor:pointer; }
-    .tt { position:absolute; pointer-events:none; background:var(--ink); color:#fff8ec; font-size:11.5px; padding:7px 10px; border-radius:9px; transform:translate(-50%,-118%); white-space:nowrap; opacity:0; transition:opacity .1s; z-index:5; box-shadow:0 6px 18px rgba(60,45,15,.25); }
-    .tt b { font-weight:640; } .tt .m { color:#d9c7a0; }
+    /* Leaflet tooltips, restyled to match the dashboard's dark chip look. */
+    .leaflet-tooltip { background:var(--ink); color:#fff8ec; border:none; font-size:11.5px;
+                       padding:7px 10px; border-radius:9px; box-shadow:0 6px 18px rgba(60,45,15,.25); }
+    .leaflet-tooltip b { font-weight:640; }
+    .leaflet-tooltip-top:before { border-top-color:var(--ink); }
 
     .listcard { margin-top:20px; }
     .tw { overflow-x:auto; }
@@ -106,12 +141,16 @@
       <h2><span class="ic" id="ic-globe"></span> World
         <span class="legend"><span><b style="background:var(--amber)"></b>live now</span><span><b style="background:var(--amber-d);opacity:.6"></b>been here</span></span></h2>
       <div class="mapwrap">
-        <svg class="worldmap" id="map" viewBox="0 8 1000 424" preserveAspectRatio="xMidYMid meet">
-          <rect class="ocean" x="0" y="0" width="1000" height="500"/>
-          <path class="land" id="land" d=""/>
-          <g id="dots"></g>
-        </svg>
-        <div class="tt" id="tt"></div>
+        <div id="map"></div>
+        <button class="mapbtn" id="fitbtn" onclick="fitAll()">Fit all</button>
+        <div class="fallback" id="fallback">
+          <svg viewBox="0 8 1000 424" preserveAspectRatio="xMidYMid meet">
+            <rect class="ocean" x="0" y="0" width="1000" height="500"/>
+            <path class="land" id="land" d=""/>
+            <g id="dots"></g>
+          </svg>
+        </div>
+        <div class="offline" id="offline">Map tiles unavailable — showing the offline world outline.</div>
       </div>
     </div>
 
@@ -124,6 +163,7 @@
   </main>
 </div>
 
+<script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/world.js"></script>
 <script>
   const P = {
@@ -151,7 +191,86 @@
     return base+(v.accuracy_m!=null
       ? ` (±${v.accuracy_m<1000?Math.round(v.accuracy_m)+"m":(v.accuracy_m/1000).toFixed(1)+"km"})` : " (exact)");
   };
-  const proj=(lng,lat)=>[ (lng+180)*1000/360, (90-lat)*500/180 ];
+  const proj=(lng,lat)=>[ (lng+180)*1000/360, (90-lat)*500/180 ];   // fallback SVG only
+
+  // ---- Leaflet map -------------------------------------------------------
+  // OpenStreetMap: free, open data (ODbL), no key. Zoom 19 is street level, so a
+  // consented GPS fix can actually be placed on the road it happened on.
+  let MAP=null, MARKERS=null, ACCURACY=null, TILES_OK=false, FITTED=false;
+
+  function initMap(){
+    MAP = L.map("map", {
+      zoomControl:true, minZoom:2, maxZoom:19,
+      worldCopyJump:true,                 // dragging past the dateline keeps markers
+      scrollWheelZoom:true,
+    }).setView([20, 10], 2);
+
+    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom:19,
+      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    });
+    tiles.on("tileload", ()=>{ TILES_OK=true; showFallback(false); });
+    // One failure is a missing tile; a failure before ANY tile loaded means the
+    // tile server is unreachable, so fall back to the offline outline.
+    tiles.on("tileerror", ()=>{ if(!TILES_OK) showFallback(true); });
+    tiles.addTo(MAP);
+
+    ACCURACY = L.layerGroup().addTo(MAP);   // GPS accuracy circles, under the pins
+    MARKERS  = L.layerGroup().addTo(MAP);
+  }
+
+  function showFallback(on){
+    document.getElementById("fallback").classList.toggle("show", on);
+    document.getElementById("offline").classList.toggle("show", on);
+    if(on){
+      document.getElementById("land").setAttribute("d", window.WORLD_LAND||"");
+      renderFallbackDots();
+    }
+  }
+
+  function markerIcon(v){
+    return L.divIcon({
+      className:"mk",
+      html:`<div class="${v.live?'mk-live':'mk-dot'}"></div>`,
+      iconSize:v.live?[13,13]:[11,11],
+      iconAnchor:v.live?[6.5,6.5]:[5.5,5.5],
+    });
+  }
+
+  function tooltipHtml(v){
+    const label=v.name||v.email||"Anonymous";
+    return `<b>${esc(label)}</b><br><span style="color:#6b6355">${esc(locText(v))}</span>`+
+      (v.funnel_stage?`<br>${esc(v.funnel_stage)}`:'')+
+      `<br><span style="color:#6b6355">${v.live?'live now':agoText(v.last_seen_at)}</span>`;
+  }
+
+  function renderMarkers(){
+    if(!MAP) return;
+    MARKERS.clearLayers(); ACCURACY.clearLayers();
+    const pts=[];
+    VIS.forEach(v=>{
+      if(v.lat==null||v.lng==null) return;
+      pts.push([v.lat, v.lng]);
+      // A consented fix knows its own error radius — draw it, so a ±2 km Wi-Fi
+      // guess never looks as certain as a ±12 m GPS lock.
+      if(v.location_source==='gps' && v.accuracy_m>0){
+        L.circle([v.lat,v.lng], {radius:v.accuracy_m, color:"#c8892c", weight:1,
+                                 fillColor:"#c8892c", fillOpacity:.12}).addTo(ACCURACY);
+      }
+      L.marker([v.lat,v.lng], {icon:markerIcon(v), riseOnHover:true})
+        .bindTooltip(tooltipHtml(v), {direction:"top", offset:[0,-8], opacity:1})
+        .addTo(MARKERS);
+    });
+    // Frame everything once; after that the view is the operator's to control,
+    // and the 3s refresh must not yank it back.
+    if(pts.length && !FITTED){ MAP.fitBounds(pts, {padding:[40,40], maxZoom:11}); FITTED=true; }
+  }
+
+  function fitAll(){
+    const pts=VIS.filter(v=>v.lat!=null&&v.lng!=null).map(v=>[v.lat,v.lng]);
+    if(!MAP || !pts.length) return;
+    MAP.fitBounds(pts, {padding:[40,40], maxZoom:11});
+  }
 
   function icons(){
     document.getElementById("logo").innerHTML=svg("spark",14);
@@ -161,7 +280,6 @@
     document.getElementById("ic-se").innerHTML=svg("sliders",16);
     document.getElementById("ic-globe").innerHTML=svg("globe",15);
     document.getElementById("ic-list").innerHTML=svg("list",15);
-    document.getElementById("land").setAttribute("d", window.WORLD_LAND||"");
   }
 
   let VIS=[];
@@ -171,7 +289,8 @@
        <div class="tile"><div class="k">Located visitors</div><div class="v">${fmt(d.total)}</div><div class="s">with a geo fix</div></div>
        <div class="tile"><div class="k">Countries</div><div class="v">${fmt(d.countries)}</div><div class="s">distinct countries</div></div>`;
   }
-  function renderDots(){
+  // Only used when tiles are unreachable — the equirectangular offline outline.
+  function renderFallbackDots(){
     const g=document.getElementById("dots");
     g.innerHTML = VIS.map((v,i)=>{
       if(v.lat==null||v.lng==null) return "";
@@ -201,36 +320,21 @@
     }).join("") || `<tr><td class="empty" colspan="5">No located visitors yet — geo fills in as people browse your site.</td></tr>`;
   }
 
-  // tooltip (event delegation on the dots group)
-  const tt=document.getElementById("tt");
-  function bindHover(){
-    const g=document.getElementById("dots"), wrap=document.querySelector(".mapwrap"), map=document.getElementById("map");
-    g.addEventListener("mouseover", e=>{
-      const t=e.target.closest("[data-i]"); if(!t) return;
-      const v=VIS[+t.dataset.i]; if(!v) return;
-      const label=v.name||v.email||"Anonymous";
-      tt.innerHTML=`<b>${esc(label)}</b><br><span class="m">${esc(locText(v))}</span>`+
-        (v.funnel_stage?` · ${esc(v.funnel_stage)}`:'')+`<br><span class="m">${v.live?'live now':agoText(v.last_seen_at)}</span>`;
-      tt.style.opacity=1;
-    });
-    g.addEventListener("mousemove", e=>{
-      const r=wrap.getBoundingClientRect();
-      tt.style.left=(e.clientX-r.left)+"px"; tt.style.top=(e.clientY-r.top)+"px";
-    });
-    g.addEventListener("mouseout", ()=>{ tt.style.opacity=0; });
-  }
-
   async function load(){
     try{
       const d=await get("/api/map");
       VIS=d.visitors||[];
-      renderKpis(d); renderDots(); renderList();
+      renderKpis(d); renderMarkers(); renderList();
+      if(document.getElementById("fallback").classList.contains("show")) renderFallbackDots();
       document.getElementById("updated").textContent="updated "+new Date().toLocaleTimeString();
     }catch(e){
       document.getElementById("kpis").innerHTML=`<div class="tile" style="grid-column:1/-1"><div class="k" style="color:#c24a33">Error</div><div class="s">${esc(e.message)}</div></div>`;
     }
   }
-  icons(); bindHover(); load(); setInterval(load, 3000);
+  icons();
+  // If Leaflet itself failed to load, fall straight through to the offline map.
+  if(window.L){ initMap(); } else { showFallback(true); }
+  load(); setInterval(load, 3000);
 </script>
 </body>
 </html>
