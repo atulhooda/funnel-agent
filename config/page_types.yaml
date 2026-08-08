@@ -5,6 +5,11 @@
 # are matched (as substrings) against the URL path (lowercased); the token "/"
 # matches only the exact root path. Edit freely — no page logic is hardcoded in
 # Python. Tuned for engageoagency.com (healthcare/clinic AI agency).
+#
+# `min_seconds` is the QUALIFYING dwell for that page type: a visit with less
+# active time than this doesn't count as a visit to it at all. High-intent pages
+# demand more proof — two seconds on /pricing is a glance, not buying intent.
+# Falls back to stage_rules.engagement.min_seconds_per_view when unset.
 
 version: 1
 default_page_type: other
@@ -14,14 +19,17 @@ rules:
   # ---- BOFU: strong buying intent ----
   - page_type: pricing
     lean: BOFU
+    min_seconds: 20
     match_any: ["/pricing", "/plans", "/quote"]
 
   - page_type: contact
     lean: BOFU
+    min_seconds: 15
     match_any: ["/contact", "/contact-sales", "/book", "/book-a-call", "/get-started", "/signup", "/trial"]
 
   - page_type: demo
     lean: BOFU
+    min_seconds: 20
     match_any: ["/experience-engageo", "/experience", "/demo", "/try"]
 
   # ---- MOFU: evaluating / self-qualifying ----
@@ -29,38 +37,47 @@ rules:
   # a visitor here is self-selecting their exact niche = solid mid-funnel signal.
   - page_type: solutions
     lean: MOFU
+    min_seconds: 15
     match_any: ["/clinics", "/solutions", "/industries", "/use-cases"]
 
   - page_type: features
     lean: MOFU
+    min_seconds: 15
     match_any: ["/services", "/how-it-works", "/features", "/product", "/integrations"]
 
   - page_type: comparison
     lean: MOFU
+    min_seconds: 15
     match_any: ["/compare", "/vs", "/alternatives"]
 
   - page_type: testimonials
     lean: MOFU
+    min_seconds: 15
     match_any: ["/testimonials", "/case-study", "/case-studies", "/customers", "/reviews"]
 
   - page_type: faq
     lean: MOFU
+    min_seconds: 12
     match_any: ["/faq", "/questions", "/support"]
 
   # ---- TOFU: awareness / browsing ----
   - page_type: blog
     lean: TOFU
+    min_seconds: 20
     match_any: ["/blog", "/article", "/guide", "/resources", "/learn"]
 
   - page_type: about
     lean: TOFU
+    min_seconds: 10
     match_any: ["/about"]
 
   # Legal/utility pages carry no buying signal — keep them out of the funnel.
   - page_type: legal
     lean: TOFU
+    min_seconds: 30
     match_any: ["/privacy", "/terms", "/security", "/legal", "/cookie"]
 
   - page_type: home
     lean: TOFU
+    min_seconds: 8
     match_any: ["/"]

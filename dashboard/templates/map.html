@@ -138,9 +138,19 @@
   const esc=s=>(s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   const fmt=n=>new Intl.NumberFormat().format(n||0);
   const get=async p=>{const r=await fetch(p); if(!r.ok) throw new Error(p+" → "+r.status); return r.json();};
-  const agoText=s=>{ if(!s) return '—'; const d=Math.max(0,Math.round((Date.now()-new Date(s).getTime())/1000)); return d<60?d+"s ago":(d<3600?Math.round(d/60)+"m ago":Math.round(d/3600)+"h ago"); };
+  // A timestamp with no offset is UTC here; without the Z, JS would read it as local.
+  const parseTs=s=>{ if(!s) return null; const d=new Date(/([zZ]|[+-]\d{2}:?\d{2})$/.test(s)?s:s+"Z"); return isNaN(d.getTime())?null:d; };
+  const agoText=s=>{ const t=parseTs(s); if(!t) return '—'; const d=Math.max(0,Math.round((Date.now()-t.getTime())/1000)); return d<60?d+"s ago":(d<3600?Math.round(d/60)+"m ago":Math.round(d/3600)+"h ago"); };
   const stageClass=s=>({TOFU:'tofu',MOFU:'mofu',BOFU:'bofu'}[s]||'');
-  const locText=v=>[v.city,v.country].filter(Boolean).join(", ")||v.country||"—";
+  // Show the finest detail available; a GPS fix carries street + neighbourhood,
+  // an IP only a city. The ± suffix says which one you're looking at.
+  const locText=v=>{
+    const parts=[v.street,v.district,v.city,v.country].filter(Boolean);
+    const base=parts.length?parts.slice(0,3).join(", "):(v.country||"—");
+    if(v.location_source!=='gps') return base;
+    return base+(v.accuracy_m!=null
+      ? ` (±${v.accuracy_m<1000?Math.round(v.accuracy_m)+"m":(v.accuracy_m/1000).toFixed(1)+"km"})` : " (exact)");
+  };
   const proj=(lng,lat)=>[ (lng+180)*1000/360, (90-lat)*500/180 ];
 
   function icons(){

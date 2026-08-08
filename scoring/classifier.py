@@ -31,7 +31,10 @@ def _load_prompt_template() -> str:
 
 def _build_user_prompt(features: dict[str, Any], stages: list[str]) -> str:
     template = _load_prompt_template()
-    features_json = json.dumps(features, indent=2, default=str)
+    # `engagement` is the raw rollup the rules engine consumes — the summarized
+    # views of it are already in the payload, so sending it too just burns tokens.
+    payload = {k: v for k, v in features.items() if k != "engagement"}
+    features_json = json.dumps(payload, indent=2, default=str)
     return (
         template
         .replace("<<STAGES>>", ", ".join(stages))

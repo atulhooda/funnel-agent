@@ -24,6 +24,21 @@ class TrackResponse(BaseModel):
     page_type: Optional[str] = None               # resolved from config
 
 
+class LocateRequest(BaseModel):
+    """A consented browser Geolocation fix (navigator.geolocation)."""
+    anonymous_id: str
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    accuracy_m: Optional[float] = Field(default=None, ge=0)   # the browser's own radius
+
+
+class LocateResponse(BaseModel):
+    status: str = "ok"
+    site_id: str
+    anonymous_id: str
+    accuracy_m: Optional[int] = None
+
+
 class IdentifyRequest(BaseModel):
     anonymous_id: str
     name: Optional[str] = None

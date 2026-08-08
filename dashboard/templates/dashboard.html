@@ -117,6 +117,13 @@
     .loc { display:inline-flex; align-items:center; gap:3px; font-size:11.5px; color:var(--muted); }
     .loc svg { width:11px; height:11px; opacity:.75; }
     .lead .loc { margin-top:3px; }
+    /* a consented GPS fix — visually distinct from an IP guess */
+    .loc.gss, .loc.gps { color:var(--good-t); }
+    .loc.gps svg { opacity:1; }
+    .loc .prec { margin-left:4px; padding:1px 5px; border-radius:999px; font-size:10px;
+                 background:var(--surface-2); border:1px solid var(--border-2); color:var(--muted); }
+    .loc.gps .prec { background:color-mix(in srgb,var(--good) 13%,transparent);
+                     border-color:color-mix(in srgb,var(--good) 30%,transparent); color:var(--good-t); }
 
     /* chips */
     .chip { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); color:var(--ink-2); white-space:nowrap; }
@@ -171,7 +178,13 @@
     .timeline .jh{ font-size:13px; font-weight:520; }
     .timeline .js{ font-size:12px; color:var(--muted); margin-top:2px; word-break:break-all; }
     .timeline .jd{ font-size:11px; color:var(--muted); font-weight:500; margin-left:6px; }
+    /* a visit that didn't clear its page type's minimum dwell */
+    .timeline .jd.weak{ color:var(--crit); opacity:.75; text-decoration:line-through; }
+    .jwhy{ font-size:12px; color:var(--ink-2); background:var(--surface); border:1px solid var(--border-2);
+           border-radius:9px; padding:8px 11px; margin-bottom:14px; line-height:1.45; }
+    .jwhy b{ font-weight:640; }
     .sess-sep{ font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:10px 0 4px 72px; }
+    .tzhint{ font-size:10.5px; letter-spacing:.04em; color:var(--muted); margin:0 0 8px 4px; }
 
     /* lead detail slide-over */
     .overlay{ position:fixed; inset:0; background:rgba(60,45,15,.30); backdrop-filter:blur(2px); opacity:0; visibility:hidden; transition:opacity .18s; z-index:40; }
@@ -268,6 +281,7 @@
     radio:'<circle cx="12" cy="12" r="2"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14M7.76 16.24a6 6 0 0 1 0-8.48M16.24 7.76a6 6 0 0 1 0 8.48M19.07 4.93a10 10 0 0 1 0 14.14"/>',
     chevron:'<path d="m9 18 6-6-6-6"/>', mouse:'<path d="m3 3 7.5 18 2.1-7.4 7.4-2.1L3 3z"/>',
     pin:'<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+    crosshair:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/>',
     grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     bars:'<path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="14" width="3" height="3" rx="1"/>',
     spark:'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
@@ -276,7 +290,17 @@
   };
   const svg = (n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
   const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-  const ts = s => s ? esc(s).slice(0,16).replace("T"," ") : "";
+  // Timestamps arrive as ISO instants (UTC). Parse them and render in the
+  // VIEWER's timezone — slicing the string printed the server's clock, which is
+  // why events logged at 10:40 PM IST used to read 17:10.
+  const parseTs = s => {
+    if(!s) return null;
+    // A value with no offset means UTC here; without the Z, JS would assume local.
+    const d = new Date(/([zZ]|[+-]\d{2}:?\d{2})$/.test(s) ? s : s+"Z");
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const TZ_NAME = (()=>{ try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e){ return ''; } })();
+  const ts = s => { const d=parseTs(s); return d ? d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : ""; };
   const get = async p => { const r=await fetch(p); if(!r.ok) throw new Error(p+" → "+r.status); return r.json(); };
   const body = id => document.querySelector("#"+id+" tbody");
 
@@ -295,17 +319,41 @@
     document.getElementById("ic-leads").innerHTML = svg("users",15);
   }
 
-  const agoText = s => { if(!s) return ''; const d=Math.max(0,Math.round((Date.now()-new Date(s).getTime())/1000)); return d<60?d+"s ago":Math.round(d/60)+"m ago"; };
+  const agoText = s => { const t=parseTs(s); if(!t) return ''; const d=Math.max(0,Math.round((Date.now()-t.getTime())/1000)); return d<60?d+"s ago":Math.round(d/60)+"m ago"; };
   const pathOf = u => { try { return u ? new URL(u).pathname : '—'; } catch(e){ return u||'—'; } };
+  // Most specific first: a consented GPS fix gives street + neighbourhood, an IP
+  // only ever gives a city (and on mobile networks, often the wrong one).
   const locText = o => {
     if(!o) return '';
+    const parts=[o.street, o.district, o.city].filter(Boolean);
+    if(parts.length) return parts.join(", ")+(o.country&&parts.length<3?", "+o.country:"");
     if(o.city && o.country) return o.city+", "+o.country;
     if(o.region && o.country) return o.region+", "+o.country;
     if(o.country) return o.country;
     if(o.timezone) return o.timezone.replace(/_/g,' ');
     return '';
   };
-  const locHtml = o => { const t=locText(o); return t?`<span class="loc">${svg('pin',11)}${esc(t)}</span>`:''; };
+  // Say how much to trust it. Without this an ISP-gateway city reads as fact.
+  // A shared fix isn't automatically precise either — Wi-Fi trilateration on a
+  // laptop can be kilometres wide, so grade it by the radius the browser gave.
+  const locPrecision = o => {
+    if(!o) return '';
+    if(o.location_source==='gps'){
+      if(o.accuracy_m==null) return 'shared by visitor';
+      const r = o.accuracy_m<1000 ? Math.round(o.accuracy_m)+' m' : (o.accuracy_m/1000).toFixed(1)+' km';
+      const grade = o.accuracy_m<=100 ? 'exact' : (o.accuracy_m<=1000 ? 'approx' : 'coarse');
+      return `${grade} · ±${r}`;
+    }
+    if(o.city||o.country) return o.isp ? `approx · from IP (${o.isp})` : 'approx · from IP';
+    return '';
+  };
+  const locHtml = o => {
+    const t=locText(o); if(!t) return '';
+    const p=locPrecision(o);
+    const gps=o&&o.location_source==='gps';
+    return `<span class="loc${gps?' gps':''}" title="${esc(p)}">${svg(gps?'crosshair':'pin',11)}${esc(t)}`+
+      (p?`<span class="prec">${esc(p)}</span>`:'')+`</span>`;
+  };
 
   function renderLive(data){
     const rows = data.visitors || [];
@@ -318,10 +366,10 @@
       const named = !!label;
       const who = named ? esc(label) : (v.lead_id ? `Lead #${v.lead_id}` : `Anonymous`);
       const av = named ? `<span class="av">${esc(label[0].toUpperCase())}</span>` : `<span class="av anon">${svg('user',13)}</span>`;
-      const loc = locText(v);
+      const loc = locHtml(v);
       return `<tr>
         <td><div class="lead">${av}<div><span class="who ${named?'':'anon'}">${who}</span></div></div></td>
-        <td>${loc?`<span class="loc">${svg('pin',11)}${esc(loc)}</span>`:'<span class="muted">—</span>'}</td>
+        <td>${loc||'<span class="muted">—</span>'}</td>
         <td class="muted num">${esc(pathOf(v.url))}</td>
         <td>${v.page_type?`<span class="chip">${esc(v.page_type)}</span>`:'<span class="muted">—</span>'}</td>
         <td>${stageChip(v.funnel_stage)}</td>
@@ -342,7 +390,7 @@
     if(m<60) return m+'m'+(r?' '+r+'s':'');
     const h=Math.floor(m/60); return h+'h'+((m%60)?' '+(m%60)+'m':'');
   };
-  const clock = s => s ? esc(s).slice(11,16) : '';   // HH:MM from ISO
+  const clock = s => { const d=parseTs(s); return d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''; };
   let drawerLeadId = null;
   const $drawer  = () => document.getElementById('drawer');
   const $overlay = () => document.getElementById('overlay');
@@ -409,9 +457,13 @@
   function renderJourney(box, d){
     const s=d.summary;
     const M=[['Total time',fmtDur(s.total_time_seconds)],['Active time',fmtDur(s.active_time_seconds)],
-      ['Page views',s.pageviews],['Clicks',s.clicks],['Pages',s.pages_distinct],['Sessions',s.sessions],
+      ['Page views',s.pageviews],['Counted pages',s.qualified_pages!=null?s.qualified_pages:'—'],
+      ['Clicks',s.clicks],['Pages',s.pages_distinct],['Sessions',s.sessions],
       ['First seen',ts(s.first_seen)||'—'],['Last seen',ts(s.last_seen)||'—']];
     const metrics=M.map(m=>`<div class="jm"><span class="jm-k">${esc(m[0])}</span><span class="jm-v">${esc(m[1])}</span></div>`).join('');
+    // Why this stage: the rule that fired, or the model + any gate that moved it.
+    const why = s.stage_source
+      ? `<div class="jwhy"><b>${esc(s.stage_source)}</b>${s.stage_reason?` — ${esc(s.stage_reason)}`:''}</div>` : '';
     let lastSess=null, items='';
     (d.timeline||[]).forEach(e=>{
       if(e.session_id && e.session_id!==lastSess){ lastSess=e.session_id; if(items) items+=`<div class="sess-sep">— new session —</div>`; }
@@ -424,14 +476,27 @@
         sub=clk.href?`on ${esc(e.path)} → ${esc(clk.href)}`:`on ${esc(e.path)}`;
       } else {
         const chip=e.page_type?`<span class="chip">${esc(e.page_type)}</span>`:'';
-        const dwell=e.dwell_seconds?`<span class="jd">${fmtDur(e.dwell_seconds)} on page</span>`:'';
-        head=`${esc(e.path)} ${dwell}`;
-        sub=chip;
+        // Active seconds are measured (tab visible, visitor not idle). The
+        // qualified flag says whether that cleared this page type's minimum.
+        const active = e.active_seconds!=null
+          ? `<span class="jd${e.qualified===false?' weak':''}">${fmtDur(e.active_seconds)} active</span>`
+          : (e.dwell_seconds?`<span class="jd">${fmtDur(e.dwell_seconds)} on page</span>`:'');
+        head=`${esc(e.path)} ${active}`;
+        const bits=[chip];
+        if(e.qualified===false && e.min_seconds)
+          bits.push(`<span class="muted">glance — under the ${e.min_seconds}s minimum, not counted</span>`);
+        const secs=Object.entries(e.sections||{}).filter(([,v])=>v>=3).slice(0,4);
+        if(secs.length)
+          bits.push(`<span class="muted">read: ${secs.map(([k,v])=>`${esc(k)} ${fmtDur(v)}`).join(' · ')}</span>`);
+        sub=bits.filter(Boolean).join(' ');
       }
       items+=`<li class="${isClick?'clk':'pv'}"><span class="jt">${clock(e.occurred_at)}</span><span class="jdot"></span>
         <div class="jc"><div class="jh">${head}</div>${sub?`<div class="js">${sub}</div>`:''}</div></li>`;
     });
-    box.innerHTML=`<div class="jmetrics">${metrics}</div><ul class="timeline">${items||'<li class="muted">No events recorded yet.</li>'}</ul>`;
+    // Name the timezone explicitly — a bare "17:06" is unreadable if you can't
+    // tell whose clock it is.
+    const tz = TZ_NAME ? `<div class="tzhint">times in ${esc(TZ_NAME)}</div>` : '';
+    box.innerHTML=`<div class="jmetrics">${metrics}</div>${why}${tz}<ul class="timeline">${items||'<li class="muted">No events recorded yet.</li>'}</ul>`;
   }
 
   function stageChip(s){ return s ? `<span class="chip ${STAGE[s]||'flat'}">${esc(s)}</span>` : '<span class="muted">unscored</span>'; }

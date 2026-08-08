@@ -24,13 +24,70 @@ A prototype **decision brain** for a behavioral marketing funnel. Its goal is to
 
 | Layer | Folder | Responsibility |
 |------|--------|----------------|
-| 1 — Tracking + ingestion | [tracking/](tracking/) | `POST /track`, `POST /identify`, event backfill on identify |
-| 2 — Scoring (two-stage)  | [scoring/](scoring/)   | Stage A deterministic features → Stage B Gemini classification (strict JSON) |
+| 1 — Tracking + ingestion | [tracking/](tracking/) | `POST /track`, `POST /identify`, `POST /locate` (opt-in precise location), event backfill on identify |
+| 2 — Scoring (two-stage)  | [scoring/](scoring/)   | Stage A deterministic features + [engagement rollup](scoring/engagement.py) → [stage rules](scoring/rules.py) → Stage B Gemini classification (strict JSON) |
 | 3 — Decision engine      | [decision/](decision/) | Gemini decision (strict JSON) + guardrails validating every decision |
 | 4 — Execution (stubbed)  | [execution/](execution/) | Abstract `Sender` + stub email/WhatsApp senders, consent re-check at send time |
 | 5 — Dashboard (read-only)| [dashboard/](dashboard/) | JSON routes + minimal HTML: leads, decisions, sent-messages |
 | Shared | [config/](config/), [db/](db/), [llm/](llm/) | Config loader + files, DB pool/repositories, direct Gemini client |
 | Test harness | [scripts/](scripts/) | `replay.py` feeds seeded journeys (TOFU / MOFU / BOFU) via HTTP |
+
+## How a funnel stage is earned
+
+A page visit on its own is a weak signal — anyone can open `/pricing` for two
+seconds. Stages are awarded on **measured behavior**:
+
+* **Active time, not wall clock.** The snippet counts a second only when the tab
+  is visible *and* the visitor moved, scrolled or typed within the last minute. A
+  pricing tab left open in the background counts for nothing.
+* **Qualification.** Each page type carries a `min_seconds` in
+  [config/page_types.yaml](config/page_types.yaml). A visit that doesn't clear it
+  is a bounce and is excluded from every count that follows.
+* **Rules first.** [config/stage_rules.yaml](config/stage_rules.yaml) holds ordered
+  rules — first match wins. Conditions can test time on a page type or URL, clicks
+  (including button label), time inside a named section, or the journey overall.
+* **Gates.** When no rule matches, the model's stage is kept only if it clears that
+  stage's minimum evidence; otherwise it's downgraded a step.
+* **Explainable.** The rule that fired (or the gate that downgraded the model) is
+  stored on the lead as `stage_source` / `stage_reason` and shown on the journey.
+
+Everything above is editable at **`/settings`** — page types with their dwell
+thresholds, the rule list with a condition builder, and the gates. Saves go to the
+`site_config` table and apply immediately, no redeploy. Set `mode` there to
+`rules_first` (default), `rules_only`, or `llm_only`.
+
+## How precise is a visitor's location?
+
+Two sources, and the difference matters:
+
+| Source | Consent | Typical precision | What you get |
+|---|---|---|---|
+| **IP lookup** (automatic) | none needed | City — **often the wrong one** | country, region, city, postal, ISP |
+| **Browser Geolocation** (opt-in) | visitor must accept the prompt | 10–100 m | street, neighbourhood, city, postal, exact radius |
+
+An IP resolves to the **ISP's gateway, not the person**. On fixed broadband it's
+usually the right city; on mobile it frequently isn't — a Jio subscriber in Pune
+commonly resolves to Mumbai. No IP database fixes this, so IP results are stored
+with `location_source='ip'` and shown as "approx · from IP (<ISP>)". The ISP name
+is your tell: a mobile carrier means "somewhere in this state".
+
+To learn *where in Pune*, the visitor has to share it. Put the ask on a button
+where it makes sense — never on page load, since an unexplained prompt gets denied
+and browsers remember the denial:
+
+```html
+<button data-fa-locate>Find my nearest clinic</button>
+```
+
+or `funnel.locate().then(r => …)`. On accept, the coordinates are reverse-geocoded
+via OpenStreetMap into a street and neighbourhood ("Gopal Krushna Gokhale Path,
+Deccan Gymkhana, Pune 411004") and stored with `location_source='gps'` plus the
+browser's own accuracy radius. A GPS fix always wins over an IP estimate and is
+never overwritten by one. The dashboard grades every fix — `exact · ±12 m`,
+`coarse · ±2.4 km`, `approx · from IP` — so a guess never reads as a fact.
+
+Expect most visitors to decline. IP-level stays the norm; the opt-in is what gives
+you real addresses for the ones who want something from you in return.
 
 ## Data model
 
@@ -82,13 +139,18 @@ without sending anything yet:
    <script src="https://YOUR_APP/track.js"
            data-api="https://YOUR_APP" data-key="YOUR_WRITE_KEY" data-site="default"></script>
    ```
-   It auto-tracks page views (incl. SPA route changes) and clicks on any
-   `data-fa-event` element, and exposes `funnel.track(type, {metadata})` and
+   It auto-tracks page views (incl. SPA route changes), clicks on any
+   `data-fa-event` element, and **engagement** — active seconds per page, scroll
+   depth and time per section — and exposes `funnel.track(type, {metadata})` and
    `funnel.identify({email, phone, email_opt_in, whatsapp_opt_in, consent_source})`.
+   Mark the blocks you want timed: `<section data-fa-section="pricing-table">`
+   (any `section[id]` is picked up automatically).
 3. **Configure** (env): `TRACK_WRITE_KEY` (require the snippet's key on `/track`),
    `CORS_ALLOW_ORIGINS` (your site origin), `EXECUTION_MODE=shadow` (never actually send).
-4. **Point config at your site**: `config/page_types.yaml` → your URL patterns;
-   `config/templates.yaml` → your copy; guardrail timezone.
+4. **Point config at your site**: `config/page_types.yaml` → your URL patterns and
+   per-page qualifying dwell; `config/stage_rules.yaml` → what earns each funnel
+   stage; `config/templates.yaml` → your copy; guardrail timezone. All of these are
+   editable live from **Settings** (`/settings`) — saved to the DB, no redeploy.
 5. **Schedule** scoring + decisions (cron/worker hitting `/score/run` then `/decide/run`).
    With `EXECUTION_MODE=shadow`, `/execute/run` logs would-be sends to `sent_messages`
    without transmitting — watch them on the dashboard.

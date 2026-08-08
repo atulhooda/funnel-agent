@@ -35,19 +35,62 @@ async def get_or_create_identity(cur, site_id: str, anonymous_id: str) -> dict:
     return await cur.fetchone()
 
 
-async def set_identity_geo(cur, site_id: str, anonymous_id: str, *, country, region, city, lat=None, lng=None) -> None:
-    """Store resolved IP geo (only fills columns that are still empty)."""
+async def set_identity_geo(
+    cur, site_id: str, anonymous_id: str, *,
+    country, region, city, lat=None, lng=None, postal=None, isp=None,
+) -> None:
+    """Store approximate IP geo.
+
+    Only fills columns that are still empty, and skips the row entirely once a
+    GPS fix exists — a precise location must never be overwritten by an IP guess.
+    """
     await cur.execute(
         """
         UPDATE identities
-           SET country   = COALESCE(country, %s),
-               region    = COALESCE(region, %s),
-               city      = COALESCE(city, %s),
-               latitude  = COALESCE(latitude, %s),
-               longitude = COALESCE(longitude, %s)
+           SET country         = COALESCE(country, %s),
+               region          = COALESCE(region, %s),
+               city            = COALESCE(city, %s),
+               postal          = COALESCE(postal, %s),
+               isp             = COALESCE(isp, %s),
+               latitude        = COALESCE(latitude, %s),
+               longitude       = COALESCE(longitude, %s),
+               location_source = COALESCE(location_source, 'ip'),
+               located_at      = COALESCE(located_at, now())
+         WHERE site_id = %s AND anonymous_id = %s
+           AND COALESCE(location_source, 'ip') <> 'gps'
+        """,
+        (country, region, city, postal, isp, lat, lng, site_id, anonymous_id),
+    )
+
+
+async def set_identity_precise_location(
+    cur, site_id: str, anonymous_id: str, *,
+    lat: float, lng: float, accuracy_m=None,
+    street=None, district=None, city=None, region=None, country=None, postal=None,
+) -> None:
+    """Store a consented browser GPS fix — this OVERWRITES the IP estimate.
+
+    Reverse-geocoded names are only written when present, so a failed lookup
+    still keeps the coordinates (and whatever the IP had already given us).
+    """
+    await cur.execute(
+        """
+        UPDATE identities
+           SET latitude        = %s,
+               longitude       = %s,
+               accuracy_m      = %s,
+               street          = COALESCE(%s, street),
+               district        = COALESCE(%s, district),
+               city            = COALESCE(%s, city),
+               region          = COALESCE(%s, region),
+               country         = COALESCE(%s, country),
+               postal          = COALESCE(%s, postal),
+               location_source = 'gps',
+               located_at      = now()
          WHERE site_id = %s AND anonymous_id = %s
         """,
-        (country, region, city, lat, lng, site_id, anonymous_id),
+        (lat, lng, accuracy_m, street, district, city, region, country, postal,
+         site_id, anonymous_id),
     )
 
 
@@ -58,19 +101,32 @@ async def set_identity_timezone(cur, site_id: str, anonymous_id: str, timezone: 
     )
 
 
+_EMPTY_LOCATION = {
+    "country": None, "region": None, "city": None, "district": None, "street": None,
+    "postal": None, "isp": None, "timezone": None, "accuracy_m": None,
+    "location_source": None, "latitude": None, "longitude": None,
+}
+
+
 async def lead_location(cur, site_id: str, lead_id: int) -> dict:
-    """Best available geo for a lead, taken from its most recently-seen identity."""
+    """Best available location for a lead.
+
+    A GPS fix wins over an IP estimate regardless of which identity is newer —
+    a consented fix from last week beats an IP guess from this morning.
+    """
     await cur.execute(
         """
-        SELECT country, region, city, timezone
+        SELECT country, region, city, district, street, postal, isp, timezone,
+               accuracy_m, location_source, latitude, longitude
         FROM identities
         WHERE site_id = %s AND lead_id = %s
           AND (country IS NOT NULL OR city IS NOT NULL OR timezone IS NOT NULL)
-        ORDER BY id DESC LIMIT 1
+        ORDER BY (location_source = 'gps') DESC NULLS LAST, id DESC
+        LIMIT 1
         """,
         (site_id, lead_id),
     )
-    return (await cur.fetchone()) or {"country": None, "region": None, "city": None, "timezone": None}
+    return (await cur.fetchone()) or dict(_EMPTY_LOCATION)
 
 
 async def link_identity(cur, site_id: str, anonymous_id: str, lead_id: int) -> dict:
@@ -285,8 +341,11 @@ async def upsert_presence(
 # insights / page analytics
 # --------------------------------------------------------------------------- #
 
-# strip scheme+host and query -> just the path (so /pricing?x=1 groups with /pricing)
-_PATH_SQL = "NULLIF(split_part(regexp_replace(url, '^https?://[^/]+', ''), '?', 1), '')"
+# strip scheme+host, query AND fragment -> just the path, so /pricing?x=1 and
+# /pricing#plans both group with /pricing (an anchor jump is the same page).
+_PATH_SQL = (
+    "NULLIF(split_part(split_part(regexp_replace(url, '^https?://[^/]+', ''), '?', 1), '#', 1), '')"
+)
 
 
 async def insights_totals(cur, site_id: str) -> dict:
@@ -294,8 +353,9 @@ async def insights_totals(cur, site_id: str) -> dict:
         f"""
         SELECT
           count(*) FILTER (WHERE event_type = 'page_view')                          AS pageviews,
-          count(*) FILTER (WHERE event_type NOT IN ('page_view', 'heartbeat'))      AS clicks,
-          count(*)                                                                   AS events,
+          count(*) FILTER (WHERE event_type NOT IN
+                           ('page_view', 'heartbeat', 'page_engagement'))            AS clicks,
+          count(*) FILTER (WHERE event_type <> 'page_engagement')                    AS events,
           count(DISTINCT anonymous_id)                                               AS visitors,
           count(DISTINCT session_id)                                                 AS sessions,
           count(DISTINCT {_PATH_SQL}) FILTER (WHERE event_type = 'page_view')        AS pages
@@ -379,7 +439,8 @@ async def list_map_visitors(cur, site_id: str, limit: int = 1000) -> list[dict]:
     await cur.execute(
         """
         SELECT p.anonymous_id, p.last_seen_at, p.url, p.page_type,
-               i.city, i.region, i.country, i.latitude, i.longitude,
+               i.city, i.region, i.country, i.district, i.street, i.postal,
+               i.isp, i.accuracy_m, i.location_source, i.latitude, i.longitude,
                l.funnel_stage, l.intent_score, l.name, l.email
         FROM visitor_presence p
         JOIN identities i ON i.site_id = p.site_id AND i.anonymous_id = p.anonymous_id
@@ -398,7 +459,8 @@ async def list_active_visitors(cur, site_id: str, since: datetime) -> list[dict]
     await cur.execute(
         """
         SELECT p.anonymous_id, p.url, p.page_type, p.last_seen_at,
-               i.lead_id, i.country, i.region, i.city, i.timezone,
+               i.lead_id, i.country, i.region, i.city, i.district, i.street,
+               i.postal, i.isp, i.accuracy_m, i.location_source, i.timezone,
                l.funnel_stage, l.intent_score, l.email, l.name
         FROM visitor_presence p
         LEFT JOIN identities i ON i.site_id = p.site_id AND i.anonymous_id = p.anonymous_id
@@ -411,10 +473,16 @@ async def list_active_visitors(cur, site_id: str, since: datetime) -> list[dict]
     return await cur.fetchall()
 
 
-async def list_leads_needing_score(cur, site_id: str) -> list[int]:
-    """Leads that are unscored, or have a new event since they were last scored.
+RESCORE_ENGAGEMENT_SECONDS = 60
 
-    Lets the scheduler re-score only what changed instead of every lead each cycle.
+
+async def list_leads_needing_score(cur, site_id: str) -> list[int]:
+    """Leads that are unscored, or whose behavior has actually moved since.
+
+    A new page view or click always counts. Engagement pings do NOT count one by
+    one — an open tab emits them every 30s, and re-classifying on each would mean
+    an LLM call per cycle per open tab. They only trigger a re-score once enough
+    active time has accumulated to plausibly change the answer.
     """
     await cur.execute(
         """
@@ -427,11 +495,20 @@ async def list_leads_needing_score(cur, site_id: str) -> list[int]:
                 SELECT 1 FROM events e
                 WHERE e.site_id = l.site_id AND e.lead_id = l.id
                   AND e.received_at > l.scored_at
+                  AND e.event_type <> 'page_engagement'
             )
+            OR COALESCE((
+                SELECT sum((e.metadata ->> 'active_ms')::numeric)
+                FROM events e
+                WHERE e.site_id = l.site_id AND e.lead_id = l.id
+                  AND e.received_at > l.scored_at
+                  AND e.event_type = 'page_engagement'
+                  AND jsonb_typeof(e.metadata -> 'active_ms') = 'number'
+            ), 0) >= %s
           )
         ORDER BY l.id
         """,
-        (site_id,),
+        (site_id, RESCORE_ENGAGEMENT_SECONDS * 1000),
     )
     return [r["id"] for r in await cur.fetchall()]
 
@@ -466,14 +543,23 @@ async def list_leads_needing_decision(cur, site_id: str) -> list[int]:
 
 
 async def list_events_for_lead(cur, site_id: str, lead_id: int, limit: int = 1000) -> list[dict]:
-    """Full event timeline for a lead (oldest first) — powers the journey view."""
+    """Human-readable event timeline for a lead (oldest first) — the journey view.
+
+    Engagement pings are excluded IN SQL: they are plumbing, and filtering them
+    after the LIMIT would let them crowd real page views out of the timeline.
+    Newest rows are kept, then re-sorted oldest-first for display.
+    """
     await cur.execute(
         """
-        SELECT id, event_type, url, page_type, session_id, metadata, occurred_at
-        FROM events
-        WHERE site_id = %s AND lead_id = %s
+        SELECT * FROM (
+            SELECT id, event_type, url, page_type, session_id, metadata, occurred_at
+            FROM events
+            WHERE site_id = %s AND lead_id = %s
+              AND event_type NOT IN ('page_engagement', 'heartbeat')
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT %s
+        ) recent
         ORDER BY occurred_at ASC, id ASC
-        LIMIT %s
         """,
         (site_id, lead_id, limit),
     )
@@ -506,6 +592,7 @@ async def event_aggregates(cur, site_id: str, lead_id: int) -> dict:
                max(occurred_at)                                  AS last_at
         FROM events
         WHERE site_id = %s AND lead_id = %s
+          AND event_type NOT IN ('heartbeat', 'page_engagement')
         """,
         (site_id, lead_id),
     )
@@ -513,16 +600,115 @@ async def event_aggregates(cur, site_id: str, lead_id: int) -> dict:
 
 
 async def event_counts_by_page_type(cur, site_id: str, lead_id: int) -> dict:
+    """Page VIEWS per page type (clicks and engagement pings excluded — counting
+    those here would let one chatty page masquerade as many visits)."""
     await cur.execute(
         """
         SELECT page_type, count(*) AS n
         FROM events
         WHERE site_id = %s AND lead_id = %s AND page_type IS NOT NULL
+          AND event_type = 'page_view'
         GROUP BY page_type
         """,
         (site_id, lead_id),
     )
     return {r["page_type"]: r["n"] for r in await cur.fetchall()}
+
+
+async def lead_behavior_rows(cur, site_id: str, lead_id: int, limit: int = 5000) -> list[dict]:
+    """Every event for a lead, reduced to what the rules engine needs.
+
+    `vid` (visit id, set by the tracking snippet) ties clicks and engagement
+    pings back to the exact page view they belong to, which is what makes
+    per-visit dwell — "45 active seconds on /pricing" — measurable at all.
+    """
+    # Take the NEWEST rows and re-sort them oldest-first: a plain ASC LIMIT would
+    # freeze a heavy visitor's score on their first 5000 events forever.
+    await cur.execute(
+        f"""
+        SELECT * FROM (
+            SELECT event_type,
+                   page_type,
+                   COALESCE({_PATH_SQL}, '/')        AS path,
+                   session_id,
+                   metadata ->> 'vid'                AS vid,
+                   metadata,
+                   occurred_at,
+                   id
+            FROM events
+            WHERE site_id = %s AND lead_id = %s AND event_type <> 'heartbeat'
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT %s
+        ) recent
+        ORDER BY occurred_at ASC, id ASC
+        """,
+        (site_id, lead_id, limit),
+    )
+    return await cur.fetchall()
+
+
+async def observed_vocabulary(cur, site_id: str, limit: int = 60) -> dict:
+    """Paths, page types, section names and click labels actually seen on this
+    site — used to populate the rule-builder dropdowns with real values."""
+    await cur.execute(
+        f"""
+        SELECT COALESCE({_PATH_SQL}, '/') AS path, count(*) AS n
+        FROM events WHERE site_id = %s AND event_type = 'page_view'
+        GROUP BY 1 ORDER BY n DESC LIMIT %s
+        """,
+        (site_id, limit),
+    )
+    paths = [r["path"] for r in await cur.fetchall()]
+
+    await cur.execute(
+        """
+        SELECT DISTINCT page_type FROM events
+        WHERE site_id = %s AND page_type IS NOT NULL ORDER BY 1
+        """,
+        (site_id,),
+    )
+    page_types = [r["page_type"] for r in await cur.fetchall()]
+
+    await cur.execute(
+        """
+        SELECT s.key AS name, count(*) AS n
+        FROM events e, jsonb_each(COALESCE(e.metadata -> 'sections', '{}'::jsonb)) AS s
+        WHERE e.site_id = %s AND e.event_type = 'page_engagement'
+        GROUP BY 1 ORDER BY n DESC LIMIT %s
+        """,
+        (site_id, limit),
+    )
+    sections = [r["name"] for r in await cur.fetchall()]
+
+    await cur.execute(
+        """
+        SELECT DISTINCT event_type FROM events
+        WHERE site_id = %s AND event_type NOT IN ('page_view', 'heartbeat', 'page_engagement')
+        ORDER BY 1 LIMIT %s
+        """,
+        (site_id, limit),
+    )
+    event_types = [r["event_type"] for r in await cur.fetchall()]
+
+    await cur.execute(
+        """
+        SELECT lower(metadata ->> 'text') AS label, count(*) AS n
+        FROM events
+        WHERE site_id = %s AND metadata ->> 'text' IS NOT NULL AND metadata ->> 'text' <> ''
+          AND event_type NOT IN ('page_view', 'heartbeat', 'page_engagement')
+        GROUP BY 1 ORDER BY n DESC LIMIT %s
+        """,
+        (site_id, limit),
+    )
+    click_labels = [r["label"] for r in await cur.fetchall()]
+
+    return {
+        "paths": paths,
+        "page_types": page_types,
+        "sections": sections,
+        "event_types": event_types,
+        "click_labels": click_labels,
+    }
 
 
 async def event_counts_for_types(cur, site_id: str, lead_id: int, event_types: list[str]) -> dict:
@@ -554,11 +740,15 @@ async def first_event(cur, site_id: str, lead_id: int) -> Optional[dict]:
 
 
 async def recent_events(cur, site_id: str, lead_id: int, limit: int) -> list[dict]:
+    """Most recent real events. Engagement pings are excluded IN SQL — filtering
+    them after the LIMIT could hand the model an empty list for exactly the
+    visitors who are reading the most."""
     await cur.execute(
         """
         SELECT event_type, url, page_type, session_id, occurred_at, metadata
         FROM events
         WHERE site_id = %s AND lead_id = %s
+          AND event_type NOT IN ('page_engagement', 'heartbeat')
         ORDER BY occurred_at DESC LIMIT %s
         """,
         (site_id, lead_id, limit),
@@ -576,6 +766,8 @@ async def update_lead_score(
     persona_signals,
     scored_at: datetime,
     scoring_error: Optional[str],
+    stage_source: Optional[str] = None,
+    stage_reason: Optional[str] = None,
 ) -> dict:
     await cur.execute(
         """
@@ -585,7 +777,9 @@ async def update_lead_score(
             likely_objections = %s,
             persona_signals   = %s,
             scored_at         = %s,
-            scoring_error     = %s
+            scoring_error     = %s,
+            stage_source      = %s,
+            stage_reason      = %s
         WHERE id = %s
         RETURNING id
         """,
@@ -596,6 +790,8 @@ async def update_lead_score(
             Jsonb(persona_signals or {}),
             scored_at,
             scoring_error,
+            stage_source,
+            stage_reason,
             lead_id,
         ),
     )
@@ -744,7 +940,7 @@ async def list_leads(cur, site_id: str) -> list[dict]:
         """
         SELECT l.id, l.name, l.email, l.phone, l.email_opt_in, l.whatsapp_opt_in, l.consent_source,
                l.funnel_stage, l.intent_score, l.likely_objections, l.persona_signals,
-               l.scored_at, l.scoring_error, l.created_at,
+               l.scored_at, l.scoring_error, l.stage_source, l.stage_reason, l.created_at,
                g.country, g.region, g.city, g.timezone,
                COALESCE(
                  (SELECT max(e.occurred_at) FROM events e WHERE e.site_id = l.site_id AND e.lead_id = l.id),
@@ -752,11 +948,12 @@ async def list_leads(cur, site_id: str) -> list[dict]:
                ) AS last_activity
         FROM leads l
         LEFT JOIN LATERAL (
-            SELECT country, region, city, timezone
+            SELECT country, region, city, district, postal, isp,
+                   accuracy_m, location_source, timezone
             FROM identities i
             WHERE i.site_id = l.site_id AND i.lead_id = l.id
               AND (i.country IS NOT NULL OR i.city IS NOT NULL OR i.timezone IS NOT NULL)
-            ORDER BY i.id DESC LIMIT 1
+            ORDER BY (i.location_source = 'gps') DESC NULLS LAST, i.id DESC LIMIT 1
         ) g ON true
         WHERE l.site_id = %s
         ORDER BY last_activity DESC, l.id DESC

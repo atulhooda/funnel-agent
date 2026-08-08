@@ -7,6 +7,16 @@ Funnel stages — choose exactly one for `funnel_stage`:
 - BOFU — bottom of funnel: close to buying; pricing and checkout activity; high intent.
 Allowed values: <<STAGES>>
 
+Weigh TIME and DEPTH, not page names. The summary reports *active* seconds only
+(tab visible, visitor not idle):
+- `pages_by_type` / `pages_by_lean` count only visits that cleared the qualifying
+  dwell in `qualifying_seconds_by_page_type`. `raw_pages_by_type` counts every
+  visit including glances — a large gap between the two means this visitor bounced.
+- `seconds_by_page_type`, `seconds_by_lean` and `sections_seconds` show where the
+  attention actually went; `clicks_by_page_type` shows where they acted.
+A brief visit to a pricing or contact page is NOT bottom-of-funnel evidence on its
+own. Sustained time on those pages, repeat visits, or a booking/contact click is.
+
 Visitor feature summary and recent events (JSON):
 <<FEATURES>>
 

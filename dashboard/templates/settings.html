@@ -31,22 +31,24 @@
     .dot { width:7px; height:7px; border-radius:50%; background:var(--good); }
     @media (max-width:760px){ .shell{ flex-direction:column; } .sidebar{ width:auto; height:auto; position:static; flex-direction:row; align-items:center; padding:12px 14px; } .side-brand{padding:0} .side-nav{flex-direction:row; margin-left:8px} .side-foot{margin-left:auto} }
 
-    .app { flex:1; min-width:0; max-width:820px; margin:0 auto; padding:30px 30px 90px; }
+    .app { flex:1; min-width:0; max-width:980px; margin:0 auto; padding:30px 30px 90px; }
     .top { margin-bottom:22px; }
     .top h1 { margin:0; font-size:21px; font-weight:640; letter-spacing:-.02em; }
     .top .sub { margin-top:6px; color:var(--muted); font-size:12.5px; }
 
     .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); margin-top:20px; box-shadow:var(--shadow); overflow:hidden; }
     .card > h2 { margin:0; padding:14px 18px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--border); font-size:12px; font-weight:650; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-2); }
+    .card > h2 .hint { margin-left:auto; text-transform:none; letter-spacing:0; font-weight:500; font-size:11.5px; color:var(--muted); }
     .card .pad { padding:18px; }
     .field { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:12px 0; border-top:1px solid var(--border-2); }
     .field:first-child { border-top:none; padding-top:2px; }
     .field .lab { font-size:13.5px; font-weight:550; }
     .field .desc { font-size:12px; color:var(--muted); margin-top:2px; }
     .field .ctl { flex:none; }
-    input[type=number], input[type=text] { font:inherit; font-size:13.5px; padding:8px 10px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--ink); width:120px; }
+    input[type=number], input[type=text], select { font:inherit; font-size:13.5px; padding:8px 10px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--ink); width:120px; }
     input[type=text]{ width:180px; }
-    input:focus { outline:none; border-color:var(--amber); box-shadow:0 0 0 3px color-mix(in srgb,var(--amber) 18%,transparent); }
+    select { width:auto; cursor:pointer; }
+    input:focus, select:focus { outline:none; border-color:var(--amber); box-shadow:0 0 0 3px color-mix(in srgb,var(--amber) 18%,transparent); }
     .hours { display:flex; align-items:center; gap:8px; }
     .hours input{ width:70px; } .hours .to{ color:var(--muted); font-size:12px; }
 
@@ -57,18 +59,48 @@
     .seg button.on.live { color:#fff8ec; background:var(--crit); }
     .warn { margin-top:14px; font-size:12.5px; color:#8a3b28; background:color-mix(in srgb,var(--crit) 12%,transparent); border:1px solid color-mix(in srgb,var(--crit) 30%,transparent); border-radius:10px; padding:10px 12px; display:none; }
     .warn.show { display:block; }
+    .note { font-size:12.5px; color:var(--ink-2); background:var(--surface-2); border:1px solid var(--border-2); border-radius:10px; padding:10px 12px; margin-bottom:16px; }
 
     .savebar { position:sticky; bottom:0; margin-top:22px; display:flex; align-items:center; gap:14px; justify-content:flex-end;
       background:linear-gradient(0deg,var(--bg) 60%,transparent); padding:14px 0 6px; }
     .btn { display:inline-flex; align-items:center; gap:8px; font:inherit; font-size:13.5px; font-weight:600; border:1px solid var(--amber-d); background:linear-gradient(180deg,var(--amber-l),var(--amber)); color:#40260a; padding:9px 18px; border-radius:10px; cursor:pointer; }
     .btn:disabled { opacity:.5; cursor:default; }
+    .btn.ghost { background:var(--surface); border-color:var(--border); color:var(--ink-2); font-weight:560; }
+    .btn.sm { padding:5px 10px; font-size:12px; border-radius:8px; }
+    .btn.icon { padding:4px 8px; font-size:12px; line-height:1.1; }
     .status { font-size:12.5px; color:var(--muted); } .status.ok{ color:var(--good-t); } .status.err{ color:var(--crit); }
 
     .chip { display:inline-flex; align-items:center; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); color:var(--ink-2); }
-    table { width:100%; border-collapse:collapse; font-size:13px; } th,td { text-align:left; padding:9px 18px; border-top:1px solid var(--border-2); }
+    .chip.BOFU { background:color-mix(in srgb,var(--crit) 14%,transparent); border-color:color-mix(in srgb,var(--crit) 32%,transparent); color:#8a3b28; }
+    .chip.MOFU { background:color-mix(in srgb,var(--amber) 18%,transparent); border-color:color-mix(in srgb,var(--amber) 38%,transparent); color:#7d5310; }
+    .chip.TOFU { background:color-mix(in srgb,var(--good) 13%,transparent); border-color:color-mix(in srgb,var(--good) 30%,transparent); color:var(--good-t); }
+    table { width:100%; border-collapse:collapse; font-size:13px; } th,td { text-align:left; padding:9px 18px; border-top:1px solid var(--border-2); vertical-align:middle; }
     th { font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:600; border-top:none; }
     .ro { font-size:12px; color:var(--muted); }
     code { background:var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:1px 5px; font-size:12px; }
+
+    /* --- rule builder --- */
+    .rule { border:1px solid var(--border); border-radius:12px; margin:0 0 12px; background:var(--surface-2); overflow:hidden; }
+    .rule.off { opacity:.55; }
+    .rule-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; background:var(--surface); border-bottom:1px solid var(--border-2); }
+    .rule-head .num { font-size:11px; color:var(--muted); font-weight:650; width:18px; flex:none; }
+    .rule-head input.name { flex:1; min-width:170px; width:auto; font-weight:580; }
+    .rule-head .spacer { flex:1; }
+    .rule-body { padding:10px 12px 12px; display:flex; flex-direction:column; gap:8px; }
+    .cond { display:flex; flex-wrap:wrap; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border-2); border-radius:10px; padding:8px 10px; }
+    .cond select, .cond input { font-size:12.5px; padding:6px 8px; border-radius:8px; }
+    .cond input.target { width:150px; }
+    .cond .m { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; color:var(--muted); }
+    .cond .m input { width:64px; text-align:right; }
+    .cond .del { margin-left:auto; }
+    .grp { font-size:11px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-2); }
+    .addrow { display:flex; gap:8px; flex-wrap:wrap; padding-top:2px; }
+    .empty { font-size:12.5px; color:var(--muted); padding:6px 2px; }
+    .gate { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 0; border-top:1px solid var(--border-2); }
+    .gate:first-child { border-top:none; }
+    .gate .m { display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); }
+    .gate .m input { width:74px; text-align:right; }
+    td input[type=text]{ width:100%; min-width:120px; } td input[type=number]{ width:80px; }
   </style>
 </head>
 <body>
@@ -98,6 +130,64 @@
           </div></div>
         </div>
         <div class="warn" id="livewarn">⚠ <b>Live</b> mode will send real messages to leads who have consent. Make sure your senders (email / WhatsApp) are configured and you have opt-in — otherwise keep Shadow.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span id="ic-brain"></span> Stage engine</h2>
+      <div class="pad">
+        <div class="note">Time is measured as <b>active</b> seconds — the tab must be visible and the visitor must have moved, scrolled or typed within the last minute. A pricing tab left open in the background counts for nothing.</div>
+        <div class="field">
+          <div><div class="lab">Who decides the stage</div><div class="desc">Rules first: your rules decide when one matches, the model covers the rest (and always supplies objections &amp; persona).</div></div>
+          <div class="ctl"><div class="seg" id="srmode">
+            <button data-v="rules_first" onclick="setSrMode('rules_first')">Rules first</button>
+            <button data-v="rules_only" onclick="setSrMode('rules_only')">Rules only</button>
+            <button data-v="llm_only" onclick="setSrMode('llm_only')">Model only</button>
+          </div></div>
+        </div>
+        <div class="field">
+          <div><div class="lab">Minimum time for a visit to count</div><div class="desc">Global floor in seconds. Shorter visits are bounces — excluded from every count. Per-page overrides below.</div></div>
+          <div class="ctl"><input type="number" id="min_seconds_per_view" min="0" max="3600"></div>
+        </div>
+        <div class="field">
+          <div><div class="lab">Cap per engagement ping</div><div class="desc">Upper bound (seconds) on any single reported chunk of time — the browser is untrusted.</div></div>
+          <div class="ctl"><input type="number" id="dwell_cap_seconds" min="30" max="86400"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span id="ic-rules"></span> Stage rules <span class="hint">first match wins — put the strictest rule on top</span></h2>
+      <div class="pad">
+        <div class="note">Each rule awards a stage when the behaviour it describes actually happened. Conditions can test time on a page type or URL, clicks, time inside a section, or the journey as a whole.</div>
+        <div id="rules"></div>
+        <div class="addrow"><button class="btn ghost sm" onclick="addRule()">+ Add rule</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span id="ic-gate"></span> Stage gates <span class="hint">applied when no rule matched</span></h2>
+      <div class="pad">
+        <div class="note">Minimum evidence the model's stage must clear. A stage that falls short is downgraded one step, so a three-second visit can never come back as BOFU. Leave a box empty to skip that check.</div>
+        <div id="gates"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span id="ic-pt"></span> Page-type rules <span class="hint">first match wins</span></h2>
+      <div style="overflow-x:auto"><table id="pt">
+        <thead><tr><th style="width:150px">Page type</th><th style="width:110px">Funnel lean</th><th style="width:120px">Min seconds</th><th>Matches path contains (comma separated)</th><th style="width:40px"></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <div class="pad" style="padding-top:12px">
+        <div class="addrow"><button class="btn ghost sm" onclick="addPageType()">+ Add page type</button></div>
+        <div class="field" style="margin-top:8px">
+          <div><div class="lab">Everything else</div><div class="desc">Page type and lean for URLs no rule matched.</div></div>
+          <div class="ctl hours">
+            <input type="text" id="default_page_type" style="width:120px" placeholder="other">
+            <select id="default_lean"></select>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -132,17 +222,17 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2><span id="ic-pt"></span> Page-type rules <span class="ro" style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500">read-only</span></h2>
-      <div style="overflow-x:auto"><table id="pt"><thead><tr><th>Page type</th><th>Funnel lean</th><th>Matches path contains</th></tr></thead><tbody></tbody></table></div>
-    </div>
-
     <div class="savebar">
       <span class="status" id="status"></span>
       <button class="btn" id="save" onclick="save()">Save changes</button>
     </div>
   </main>
 </div>
+
+<datalist id="dl-paths"></datalist>
+<datalist id="dl-sections"></datalist>
+<datalist id="dl-events"></datalist>
+<datalist id="dl-labels"></datalist>
 
 <script>
   const P = {
@@ -152,11 +242,39 @@
     sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
     spark:'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
     send:'<path d="m22 2-7 20-4-9-9-4 20-7z"/>', shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', layers:'<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+    brain:'<path d="M12 5a3 3 0 0 0-6 0 3 3 0 0 0-1 5.8A3 3 0 0 0 8 16a3 3 0 0 0 4 2.8z"/><path d="M12 5a3 3 0 0 1 6 0 3 3 0 0 1 1 5.8A3 3 0 0 1 16 16a3 3 0 0 1-4 2.8z"/>',
+    list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    filter:'<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>',
   };
   const svg=(n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]||''}</svg>`;
   const esc=s=>(s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   const get=async p=>{const r=await fetch(p); if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail||("HTTP "+r.status)); return r.json();};
-  let MODE="shadow";
+
+  let MODE="shadow", SRMODE="rules_first";
+  let STAGES=["TOFU","MOFU","BOFU"], VOCAB={paths:[],page_types:[],sections:[],event_types:[],click_labels:[]};
+  let RULES=[], PTRULES=[], GATES={};
+
+  // What each condition type can test. `metrics` are the numeric thresholds the
+  // engine understands — the keys map 1:1 to the ones config/stage_rules.yaml uses.
+  const COND = {
+    page_type: { label:"Time on page type", targetKey:"page_type", targetList:"dl-pagetypes", ph:"pricing",
+      metrics:[["min_seconds","seconds ≥"],["max_seconds","seconds ≤"],["min_views","visits ≥"],["min_clicks","clicks ≥"],["min_scroll_pct","scrolled % ≥"]] },
+    path:      { label:"Time on URL path", targetKey:"contains", targetList:"dl-paths", ph:"/pricing",
+      metrics:[["min_seconds","seconds ≥"],["max_seconds","seconds ≤"],["min_views","visits ≥"],["min_clicks","clicks ≥"],["min_scroll_pct","scrolled % ≥"]] },
+    section:   { label:"Time in section", targetKey:"name", targetList:"dl-sections", ph:"pricing-table",
+      metrics:[["min_seconds","seconds ≥"],["max_seconds","seconds ≤"],["min_views","visits ≥"]] },
+    event:     { label:"Click / event", targetKey:"event_type", targetList:"dl-events", ph:"click", text:true,
+      metrics:[["min_count","times ≥"]] },
+    total:     { label:"Whole journey", targetKey:null,
+      metrics:[["min_active_seconds","active seconds ≥"],["max_active_seconds","active seconds ≤"],
+               ["min_pageviews","counted pages ≥"],["min_raw_pageviews","page views ≥"],
+               ["min_distinct_pages","distinct pages ≥"],["max_distinct_pages","distinct pages ≤"],
+               ["min_sessions","sessions ≥"],["min_active_days","active days ≥"],
+               ["min_clicks","clicks ≥"],["min_measured_visits","measured visits ≥"]] },
+  };
+  // Every metric the API accepts must be rendered above: syncRules rebuilds each
+  // condition from the widgets on screen, so an unrendered key is dropped on save.
+  const GROUPS = [["all","Must"],["any","Any of"],["none","Must not"]];
 
   function icons(){
     document.getElementById("logo").innerHTML=svg("spark",14);
@@ -168,37 +286,272 @@
     document.getElementById("ic-guard").innerHTML=svg("shield",15);
     document.getElementById("ic-auto").innerHTML=svg("clock",15);
     document.getElementById("ic-pt").innerHTML=svg("layers",15);
+    document.getElementById("ic-brain").innerHTML=svg("brain",15);
+    document.getElementById("ic-rules").innerHTML=svg("list",15);
+    document.getElementById("ic-gate").innerHTML=svg("filter",15);
   }
   function setMode(m){
     MODE=m;
     document.querySelectorAll("#mode button").forEach(b=>b.classList.toggle("on", b.dataset.v===m));
     document.getElementById("livewarn").classList.toggle("show", m==="live");
   }
+  function setSrMode(m){
+    SRMODE=m;
+    document.querySelectorAll("#srmode button").forEach(b=>b.classList.toggle("on", b.dataset.v===m));
+  }
+
+  const opts=(list,sel)=>list.map(v=>`<option value="${esc(v)}"${v===sel?" selected":""}>${esc(v)}</option>`).join("");
+  const dl=(id,list)=>{ const el=document.getElementById(id); if(el) el.innerHTML=list.map(v=>`<option value="${esc(v)}">`).join(""); };
+
+  // ---------- stage rules ----------
+  function condHTML(c, ri, gi, ci){
+    const type = COND[c.type] ? c.type : "total";
+    const spec = COND[type];
+    const path = `${ri}.${gi}.${ci}`;
+    let h = `<div class="cond" data-cond="${path}">
+      <select data-k="type" onchange="onCondType(this)">` +
+      Object.entries(COND).map(([k,v])=>`<option value="${k}"${k===type?" selected":""}>${esc(v.label)}</option>`).join("") +
+      `</select>`;
+
+    if (spec.targetKey){
+      const val = c[spec.targetKey] || "";
+      h += `<input class="target" type="text" data-k="${spec.targetKey}" list="${spec.targetList}" placeholder="${esc(spec.ph)}" value="${esc(val)}">`;
+    }
+    if (spec.text){
+      const t = Array.isArray(c.text_contains) ? c.text_contains.join(", ") : (c.text_contains||"");
+      h += `<input class="target" type="text" data-k="text_contains" list="dl-labels" placeholder="label contains: book a call, demo" value="${esc(t)}" style="width:230px">`;
+    }
+    spec.metrics.forEach(([key,label])=>{
+      const v = (c[key]===0||c[key]) ? c[key] : "";
+      h += `<span class="m">${esc(label)} <input type="number" min="0" data-m="${key}" value="${esc(v)}"></span>`;
+    });
+    if (type==="total"){
+      const idv = c.identified===true ? "true" : (c.identified===false ? "false" : "");
+      h += `<span class="m">visitor <select data-k="identified">
+        <option value=""${idv===""?" selected":""}>any</option>
+        <option value="true"${idv==="true"?" selected":""}>known</option>
+        <option value="false"${idv==="false"?" selected":""}>anonymous</option></select></span>`;
+    }
+    h += `<button class="btn ghost sm del" onclick="delCond(${ri},'${gi}',${ci})" title="Remove condition">✕</button></div>`;
+    return h;
+  }
+
+  function ruleHTML(r, i){
+    const groups = GROUPS.map(([g,label])=>{
+      const conds = (r.when && r.when[g]) || [];
+      if (!conds.length) return "";
+      return `<div class="grp">${label}</div>` + conds.map((c,ci)=>condHTML(c,i,g,ci)).join("");
+    }).join("");
+    const empty = groups ? "" : `<div class="empty">No conditions yet — add one below.</div>`;
+    return `<div class="rule${r.enabled===false?" off":""}" data-rule="${i}">
+      <div class="rule-head">
+        <span class="num">${i+1}</span>
+        <input class="name" type="text" data-k="name" value="${esc(r.name||"")}" placeholder="Rule name">
+        <span class="chip ${esc(r.stage||"")}">${esc(r.stage||"")}</span>
+        <select data-k="stage" onchange="reRender()">${opts(STAGES, r.stage)}</select>
+        <span class="m ro">score <input type="number" min="0" max="100" data-k="intent_score" value="${(r.intent_score===0||r.intent_score)?r.intent_score:""}" style="width:64px" placeholder="auto"></span>
+        <label class="ro" style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" data-k="enabled" ${r.enabled===false?"":"checked"} onchange="reRender()"> on</label>
+        <button class="btn ghost icon" onclick="moveRule(${i},-1)" title="Move up">↑</button>
+        <button class="btn ghost icon" onclick="moveRule(${i},1)" title="Move down">↓</button>
+        <button class="btn ghost icon" onclick="delRule(${i})" title="Delete rule">✕</button>
+      </div>
+      <div class="rule-body">
+        ${groups}${empty}
+        <div class="addrow">
+          ${GROUPS.map(([g,label])=>`<button class="btn ghost sm" onclick="addCond(${i},'${g}')">+ ${esc(label)} condition</button>`).join("")}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function renderRules(){
+    const host=document.getElementById("rules");
+    host.innerHTML = RULES.length ? RULES.map(ruleHTML).join("")
+      : `<div class="empty">No rules — every stage will come from the model, subject to the gates below.</div>`;
+  }
+
+  // Read the DOM back into RULES so edits survive a re-render.
+  function syncRules(){
+    document.querySelectorAll('[data-rule]').forEach(el=>{
+      const r = RULES[+el.dataset.rule]; if(!r) return;
+      el.querySelectorAll('.rule-head [data-k]').forEach(inp=>{
+        const k=inp.dataset.k;
+        if(k==="enabled") r.enabled = inp.checked;
+        else if(k==="intent_score") r.intent_score = inp.value===""?null:+inp.value;
+        else r[k] = inp.value;
+      });
+    });
+    document.querySelectorAll('[data-cond]').forEach(el=>{
+      const [ri,gi,ci] = el.dataset.cond.split(".");
+      const r = RULES[+ri]; if(!r||!r.when||!r.when[gi]) return;
+      const c = r.when[gi][+ci]; if(!c) return;
+      // rebuild the condition from scratch: stale keys from a type switch must go
+      const next = { type: el.querySelector('[data-k="type"]').value };
+      el.querySelectorAll('[data-k]').forEach(inp=>{
+        const k=inp.dataset.k; if(k==="type") return;
+        if(k==="text_contains") next[k] = inp.value.split(",").map(s=>s.trim()).filter(Boolean);
+        else if(k==="identified"){ if(inp.value!=="") next[k] = inp.value==="true"; }
+        else if(inp.value!=="") next[k]=inp.value;
+      });
+      el.querySelectorAll('[data-m]').forEach(inp=>{ if(inp.value!=="") next[inp.dataset.m] = +inp.value; });
+      r.when[gi][+ci] = next;
+    });
+  }
+  function reRender(){ syncRules(); renderRules(); }
+  function onCondType(){ reRender(); }
+
+  function addRule(){
+    syncRules();
+    RULES.push({name:"New rule", stage:"MOFU", enabled:true, intent_score:null,
+                when:{all:[{type:"page_type", page_type:"", min_seconds:30}]}});
+    renderRules();
+  }
+  function delRule(i){ syncRules(); RULES.splice(i,1); renderRules(); }
+  function moveRule(i,d){
+    syncRules(); const j=i+d; if(j<0||j>=RULES.length) return;
+    [RULES[i],RULES[j]]=[RULES[j],RULES[i]]; renderRules();
+  }
+  function addCond(i,g){
+    syncRules();
+    const r=RULES[i]; r.when = r.when||{}; r.when[g] = r.when[g]||[];
+    r.when[g].push({type:"total", min_active_seconds:60});
+    renderRules();
+  }
+  function delCond(i,g,ci){ syncRules(); RULES[i].when[g].splice(ci,1); renderRules(); }
+
+  // ---------- gates ----------
+  function renderGates(){
+    const gateStages = STAGES.filter(s=>s!==STAGES[0]).reverse();   // no gate on the lowest stage
+    document.getElementById("gates").innerHTML = gateStages.map(s=>{
+      const g = GATES[s] || {};
+      const lean = (g.min_lean_seconds||{})[s];
+      const v = k => (g[k]===0||g[k]) ? g[k] : "";
+      return `<div class="gate" data-gate="${esc(s)}">
+        <span class="chip ${esc(s)}">${esc(s)}</span>
+        <span class="m">needs active seconds ≥ <input type="number" min="0" data-g="min_active_seconds" value="${esc(v("min_active_seconds"))}"></span>
+        <span class="m">counted pages ≥ <input type="number" min="0" data-g="min_pageviews" value="${esc(v("min_pageviews"))}"></span>
+        <span class="m">sessions ≥ <input type="number" min="0" data-g="min_sessions" value="${esc(v("min_sessions"))}"></span>
+        <span class="m">seconds on ${esc(s)} pages ≥ <input type="number" min="0" data-lean="${esc(s)}" value="${(lean===0||lean)?esc(lean):""}"></span>
+      </div>`;
+    }).join("");
+  }
+  // Start from what was loaded and overwrite only the fields this page renders,
+  // so gate settings written by hand in YAML (extra leans, other keys) survive a save.
+  function collectGates(){
+    const out=JSON.parse(JSON.stringify(GATES||{}));
+    document.querySelectorAll("[data-gate]").forEach(el=>{
+      const stage=el.dataset.gate, g=out[stage]||(out[stage]={});
+      el.querySelectorAll("[data-g]").forEach(inp=>{
+        if(inp.value==="") delete g[inp.dataset.g]; else g[inp.dataset.g]=+inp.value;
+      });
+      el.querySelectorAll("[data-lean]").forEach(inp=>{
+        const lean=inp.dataset.lean;
+        if(inp.value===""){ if(g.min_lean_seconds) delete g.min_lean_seconds[lean]; }
+        else { g.min_lean_seconds=g.min_lean_seconds||{}; g.min_lean_seconds[lean]=+inp.value; }
+      });
+      if(g.min_lean_seconds && !Object.keys(g.min_lean_seconds).length) delete g.min_lean_seconds;
+    });
+    return out;
+  }
+
+  // ---------- page-type rules ----------
+  function renderPageTypes(){
+    document.querySelector("#pt tbody").innerHTML = PTRULES.map((r,i)=>`
+      <tr data-pt="${i}">
+        <td><input type="text" data-k="page_type" value="${esc(r.page_type||"")}" placeholder="pricing"></td>
+        <td><select data-k="lean">${opts(STAGES, r.lean)}</select></td>
+        <td><input type="number" min="0" max="3600" data-k="min_seconds" value="${(r.min_seconds===0||r.min_seconds)?r.min_seconds:""}" placeholder="floor"></td>
+        <td><input type="text" data-k="match_any" value="${esc((r.match_any||[]).join(", "))}" placeholder="/pricing, /plans"></td>
+        <td><button class="btn ghost icon" onclick="delPageType(${i})" title="Delete">✕</button></td>
+      </tr>`).join("");
+  }
+  function syncPageTypes(){
+    document.querySelectorAll("[data-pt]").forEach(el=>{
+      const r = PTRULES[+el.dataset.pt]; if(!r) return;
+      el.querySelectorAll("[data-k]").forEach(inp=>{
+        const k=inp.dataset.k;
+        if(k==="match_any") r[k]=inp.value.split(",").map(s=>s.trim()).filter(Boolean);
+        else if(k==="min_seconds") r[k]= inp.value===""?null:+inp.value;
+        else r[k]=inp.value;
+      });
+    });
+  }
+  function addPageType(){ syncPageTypes(); PTRULES.push({page_type:"", lean:"MOFU", min_seconds:15, match_any:[]}); renderPageTypes(); }
+  function delPageType(i){ syncPageTypes(); PTRULES.splice(i,1); renderPageTypes(); }
+
+  // ---------- load / save ----------
   function apply(d){
     setMode(d.execution_mode);
+    STAGES = d.stages || STAGES;
+    VOCAB = d.vocabulary || VOCAB;
+    dl("dl-paths", VOCAB.paths||[]);
+    dl("dl-sections", VOCAB.sections||[]);
+    dl("dl-events", (VOCAB.event_types||[]).concat(["click"]));
+    dl("dl-labels", VOCAB.click_labels||[]);
+
     const g=d.guardrails;
     document.getElementById("max_outreach").value=g.max_outreach;
     document.getElementById("window_days").value=g.window_days;
     document.getElementById("send_start_hour").value=g.send_start_hour;
     document.getElementById("send_end_hour").value=g.send_end_hour;
     document.getElementById("timezone").value=g.timezone;
+
     const s=d.scheduler;
     document.getElementById("sched-chip").textContent = s.enabled ? "on" : "off";
     document.getElementById("sched-desc").textContent = `Runs the score → decide → execute loop every ${s.interval_seconds}s`;
-    const pt=d.page_types;
-    document.querySelector("#pt tbody").innerHTML = (pt.rules||[]).map(r=>
-      `<tr><td><span class="chip">${esc(r.page_type)}</span></td><td>${esc(r.lean||'—')}</td><td class="ro">${(r.match_any||[]).map(esc).join(", ")}</td></tr>`).join("")
-      + `<tr><td class="ro">default</td><td class="ro">${esc(pt.default_lean||'—')}</td><td class="ro">everything else → <b>${esc(pt.default_page_type||'other')}</b></td></tr>`;
+
+    const sr=d.stage_rules||{};
+    setSrMode(sr.mode||"rules_first");
+    const eng=sr.engagement||{};
+    document.getElementById("min_seconds_per_view").value = eng.min_seconds_per_view ?? 8;
+    document.getElementById("dwell_cap_seconds").value = eng.dwell_cap_seconds ?? 1800;
+    RULES = JSON.parse(JSON.stringify(sr.rules||[]));
+    GATES = JSON.parse(JSON.stringify(sr.gates||{}));
+    renderRules(); renderGates();
+
+    const pt=d.page_types||{};
+    PTRULES = JSON.parse(JSON.stringify(pt.rules||[]));
+    renderPageTypes();
+    document.getElementById("default_page_type").value = pt.default_page_type||"other";
+    document.getElementById("default_lean").innerHTML = opts(STAGES, pt.default_lean||"TOFU");
+
+    // page types feed the condition builder's dropdown of known types
+    const known = Array.from(new Set(PTRULES.map(r=>r.page_type).filter(Boolean)
+      .concat(VOCAB.page_types||[])));
+    let host=document.getElementById("dl-pagetypes");
+    if(!host){ host=document.createElement("datalist"); host.id="dl-pagetypes"; document.body.appendChild(host); }
+    host.innerHTML = known.map(v=>`<option value="${esc(v)}">`).join("");
   }
+
   function collect(){
-    return { execution_mode: MODE, guardrails: {
-      max_outreach: +document.getElementById("max_outreach").value,
-      window_days: +document.getElementById("window_days").value,
-      send_start_hour: +document.getElementById("send_start_hour").value,
-      send_end_hour: +document.getElementById("send_end_hour").value,
-      timezone: document.getElementById("timezone").value.trim() || "UTC",
-    }};
+    syncRules(); syncPageTypes();
+    return {
+      execution_mode: MODE,
+      guardrails: {
+        max_outreach: +document.getElementById("max_outreach").value,
+        window_days: +document.getElementById("window_days").value,
+        send_start_hour: +document.getElementById("send_start_hour").value,
+        send_end_hour: +document.getElementById("send_end_hour").value,
+        timezone: document.getElementById("timezone").value.trim() || "UTC",
+      },
+      stage_rules: {
+        enabled: SRMODE !== "llm_only",
+        mode: SRMODE,
+        engagement: {
+          min_seconds_per_view: +document.getElementById("min_seconds_per_view").value || 0,
+          dwell_cap_seconds: +document.getElementById("dwell_cap_seconds").value || 1800,
+        },
+        rules: RULES,
+        gates: collectGates(),
+      },
+      page_types: {
+        default_page_type: document.getElementById("default_page_type").value.trim() || "other",
+        default_lean: document.getElementById("default_lean").value,
+        rules: PTRULES,
+      },
+    };
   }
+
   function setStatus(msg, cls){ const s=document.getElementById("status"); s.textContent=msg; s.className="status "+(cls||""); }
   async function save(){
     const btn=document.getElementById("save"); btn.disabled=true; setStatus("Saving…","");

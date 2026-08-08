@@ -22,6 +22,12 @@ CONFIG_DIR = pathlib.Path(__file__).resolve().parent
 # edits take effect without a redeploy. Single Railway replica => one source.
 _overrides: dict[str, dict] = {}
 
+# Config blocks whose saved override REPLACES the YAML file instead of merging
+# into it. Both are ordered rule lists edited as a whole on the Settings page —
+# deep-merging them would resurrect rules the user deleted. Callers that save
+# these must send the complete block.
+REPLACE_KEYS = {"page_types", "stage_rules"}
+
 
 @functools.lru_cache(maxsize=None)
 def _load_yaml(name: str) -> dict:
@@ -46,7 +52,11 @@ def get_config(name: str, site_id: str = "default") -> dict:
     """Return a named config block (e.g. 'page_types'), with any DB override merged in."""
     base = _load_yaml(name)
     override = _overrides.get(name)
-    return _deep_merge(base, override) if override else copy.deepcopy(base)
+    if not override:
+        return copy.deepcopy(base)
+    if name in REPLACE_KEYS:
+        return copy.deepcopy(override)
+    return _deep_merge(base, override)
 
 
 def set_override(name: str, value: Optional[dict]) -> None:
@@ -104,6 +114,40 @@ def resolve_page_type(url: Optional[str], site_id: str = "default") -> tuple[Opt
         if any(_token_matches(t, path) for t in rule.get("match_any", [])):
             return (rule.get("page_type"), rule.get("lean"))
     return (cfg.get("default_page_type"), cfg.get("default_lean"))
+
+
+def min_seconds_by_page_type(site_id: str = "default") -> dict[str, int]:
+    """Return {page_type: qualifying_seconds} — the active time a visit must clear
+    before it counts as a real visit to that page type. Page types without an
+    explicit `min_seconds` fall back to stage_rules.engagement.min_seconds_per_view."""
+    cfg = get_config("page_types", site_id)
+    fallback = int(
+        (get_config("stage_rules", site_id).get("engagement") or {}).get("min_seconds_per_view", 0)
+    )
+    out: dict[str, int] = {}
+    for rule in cfg.get("rules", []):
+        page_type = rule.get("page_type")
+        if not page_type:
+            continue
+        raw = rule.get("min_seconds")
+        try:
+            out[page_type] = int(raw) if raw is not None else fallback
+        except (TypeError, ValueError):
+            out[page_type] = fallback
+    default_type = cfg.get("default_page_type")
+    if default_type and default_type not in out:
+        out[default_type] = fallback
+    return out
+
+
+def qualifying_seconds(page_type: Optional[str], site_id: str = "default") -> int:
+    """Qualifying dwell for one page type (falls back to the global floor)."""
+    fallback = int(
+        (get_config("stage_rules", site_id).get("engagement") or {}).get("min_seconds_per_view", 0)
+    )
+    if not page_type:
+        return fallback
+    return min_seconds_by_page_type(site_id).get(page_type, fallback)
 
 
 def page_type_leans(site_id: str = "default") -> dict[str, Optional[str]]:

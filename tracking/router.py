@@ -9,6 +9,8 @@ from tracking.geo import client_ip_from_headers
 from tracking.schemas import (
     IdentifyRequest,
     IdentifyResponse,
+    LocateRequest,
+    LocateResponse,
     TrackRequest,
     TrackResponse,
 )
@@ -40,6 +42,27 @@ async def track(body: TrackRequest, request: Request, site_id: str = Depends(get
         event_id=result["event_id"],
         lead_id=result["lead_id"],
         page_type=result["page_type"],
+    )
+
+
+@router.post("/locate", response_model=LocateResponse, dependencies=[Depends(require_write_key)])
+async def locate(body: LocateRequest, site_id: str = Depends(get_site_id)) -> LocateResponse:
+    """Record a precise location the visitor explicitly consented to share.
+
+    Only ever called from `funnel.locate()`, which the browser gates behind its
+    own permission prompt — this endpoint cannot obtain a location by itself.
+    """
+    result = await service.record_precise_location(
+        site_id=site_id,
+        anonymous_id=body.anonymous_id,
+        latitude=body.latitude,
+        longitude=body.longitude,
+        accuracy_m=body.accuracy_m,
+    )
+    return LocateResponse(
+        site_id=site_id,
+        anonymous_id=result["anonymous_id"],
+        accuracy_m=result["accuracy_m"],
     )
 
 

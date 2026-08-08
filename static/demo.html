@@ -49,6 +49,44 @@
   <p class="muted">A page view also fires automatically on load (this page = <code>/demo</code>). “Book a call” is tracked declaratively via <code>data-fa-event</code>.</p>
 
   <div class="card">
+    <h2>Simulate time on page</h2>
+    <p class="muted" style="margin-top:0">The buttons above record a visit with <b>no</b> dwell, so the stage rules
+      correctly ignore them. These fire a visit <em>plus</em> measured active time — the difference between a
+      glance and a real read. Compare the two on the dashboard.</p>
+    <div class="row">
+      <button onclick="visitFor('/pricing', 3)">Pricing · 3s glance</button>
+      <button onclick="visitFor('/pricing', 70, {'pricing-table': 50})">Pricing · 70s read</button>
+      <button onclick="visitFor('/services', 60, {'how-it-works': 35})">Services · 60s read</button>
+      <button onclick="visitFor('/blog/getting-started', 240)">Blog · 4 min read</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Precise location (opt-in)</h2>
+    <p class="muted" style="margin-top:0">Every visitor already gets an approximate city from their IP — but that's
+      the <b>ISP's gateway</b>, not the person. On a mobile network it's routinely the wrong city (a Jio user in Pune
+      usually resolves to Mumbai). The only way to know where someone actually is, is to ask:
+      the button below triggers the browser's own permission prompt, and the answer is reverse-geocoded to a
+      street and neighbourhood.</p>
+    <div class="row"><button class="primary" data-fa-locate onclick="noteLocate()">Find my nearest clinic</button></div>
+    <p class="muted" id="locmsg" style="margin-bottom:0"></p>
+  </div>
+
+  <section data-fa-section="how-it-works" style="min-height:340px">
+    <div class="card"><h2>How it works (a real section)</h2>
+      <p class="muted">This block is marked <code>data-fa-section="how-it-works"</code>. Scroll it into view and leave
+        it there — the seconds you spend here are measured and show up on your journey in the dashboard.</p>
+    </div>
+  </section>
+
+  <section data-fa-section="pricing-table" style="min-height:340px">
+    <div class="card"><h2>Pricing table (a real section)</h2>
+      <p class="muted">Same for this one, marked <code>data-fa-section="pricing-table"</code>. Time only counts while
+        the tab is visible and you've moved or scrolled in the last minute.</p>
+    </div>
+  </section>
+
+  <div class="card">
     <h2>Get a proposal</h2>
     <p class="muted" style="margin-top:0">Submitting this calls <code>funnel.identify()</code> with the consent you give.</p>
     <label>Email</label><input id="email" type="email" placeholder="you@company.com" value="lee@company.com" />
@@ -73,6 +111,22 @@
     window.funnel.track(type, { url: url, metadata: meta || {} });
     log('track ' + type + '  ' + url);
   }
+  // Record a complete visit to `path` with `seconds` of measured active time
+  // (and optional per-section seconds) — the same shape the snippet reports for
+  // a real page. A fresh vid keeps each simulated visit separate.
+  function visitFor(path, seconds, sections) {
+    var url = location.origin + path;
+    var vid = 'v-sim-' + Math.random().toString(36).slice(2, 10);
+    var secs = {};
+    Object.keys(sections || {}).forEach(function (k) { secs[k] = sections[k] * 1000; });
+    window.funnel.track('page_view', { url: url, metadata: { vid: vid } });
+    window.funnel.track('page_engagement', { url: url, metadata: {
+      vid: vid, active_ms: seconds * 1000, elapsed_ms: seconds * 1000,
+      scroll_pct: seconds > 20 ? 85 : 15, sections: secs
+    }});
+    log('visit ' + path + '  ' + seconds + 's active' +
+        (Object.keys(secs).length ? '  sections=' + JSON.stringify(sections) : ''));
+  }
   function submitLead() {
     var traits = {
       email: document.getElementById('email').value || null,
@@ -84,6 +138,21 @@
     window.funnel.identify(traits);
     window.funnel.track('form_submit', { url: location.origin + '/proposal', metadata: { form: 'proposal' } });
     log('identify ' + traits.email + '  (email_opt_in=' + traits.email_opt_in + ', wa_opt_in=' + traits.whatsapp_opt_in + ')');
+  }
+  function noteLocate() {
+    var el = document.getElementById('locmsg');
+    el.textContent = 'Waiting for the browser permission prompt…';
+    // data-fa-locate already fired the request; call again to read the result
+    // (the browser caches the answer, so this doesn't prompt twice).
+    window.funnel.locate().then(function (r) {
+      el.textContent = r.ok
+        ? 'Shared: ' + r.latitude.toFixed(5) + ', ' + r.longitude.toFixed(5) +
+          ' (±' + Math.round(r.accuracy_m) + ' m) — check the dashboard for the street name.'
+        : (r.reason === 'denied'
+            ? 'Declined — this visitor stays at IP-level accuracy, which is the normal case.'
+            : 'Location unavailable on this device/browser.');
+      log('locate ' + (r.ok ? 'ok ±' + Math.round(r.accuracy_m) + 'm' : r.reason));
+    });
   }
   // log the auto page_view too
   log('track page_view  ' + location.href + '  (auto, anon=' + window.funnel.anonymousId() + ')');

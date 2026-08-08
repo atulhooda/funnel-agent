@@ -1,0 +1,127 @@
+# stage_rules.yaml — deterministic funnel-stage rules (Layer 2, Stage A+).
+#
+# Why this file exists: a page visit on its own is a weak signal. Anyone can open
+# /pricing for two seconds. These rules add the missing dimensions — how LONG
+# they stayed, WHAT they clicked, and WHICH sections they actually read — so a
+# stage is earned, not guessed.
+#
+# Evaluation order per lead:
+#   1. Qualification  — visits shorter than the page type's `min_seconds`
+#                       (config/page_types.yaml) don't count as visits at all.
+#   2. Rules          — first matching rule wins and sets stage + intent score.
+#   3. Gates          — if no rule matched, the LLM's stage is kept only when it
+#                       clears that stage's minimum evidence; otherwise it is
+#                       downgraded one step.
+#
+# Everything here is editable from the Settings page (saved to the DB and applied
+# live). No stage logic is hardcoded in Python.
+
+version: 1
+enabled: true
+
+# rules_first — rules decide the stage; the LLM still supplies objections/persona
+#               and covers leads no rule matched. (recommended)
+# rules_only  — never let the LLM set the stage.
+# llm_only    — ignore these rules entirely (old behavior).
+mode: rules_first
+
+engagement:
+  # Global floor: a page view with less active time than this is a bounce and is
+  # excluded from every count below. Per-page-type overrides live in page_types.yaml.
+  min_seconds_per_view: 8
+  # Hard cap on the active seconds a single engagement ping may report (anti-noise).
+  dwell_cap_seconds: 1800
+  # A visit is "engaged" when it clears its page type's min_seconds.
+
+# --- Rules: first match wins, so order matters (strictest first) -------------
+# Condition types:
+#   page_type  page_type, min_seconds, min_views, min_clicks, min_scroll_pct
+#   path       contains,  min_seconds, min_views, min_clicks, min_scroll_pct
+#   section    name (substring), min_seconds, min_views
+#   event      event_type, min_count, text_contains: [..]  (click label/id/href)
+#   total      min_active_seconds, min_pageviews, min_sessions, min_active_days,
+#              min_distinct_pages, identified: true|false
+# A rule matches when every condition in `all` holds, at least one in `any`
+# holds, and none in `none` hold (omitted groups are skipped).
+rules:
+  - name: Booking intent — asked for a call
+    stage: BOFU
+    intent_score: 95
+    when:
+      all:
+        # A real person loads a page before clicking — filters bare POSTs and
+        # stray automation. Deliberately NOT a dwell threshold: an explicit
+        # booking click is intent even when no engagement ping arrived.
+        - { type: total, min_raw_pageviews: 1 }
+      any:
+        - { type: event, event_type: click, min_count: 1,
+            text_contains: ["book a call", "book a demo", "get started", "talk to sales", "schedule"] }
+        - { type: event, event_type: demo_request, min_count: 1 }
+        - { type: event, event_type: contact_sales, min_count: 1 }
+
+  - name: Priced it seriously
+    stage: BOFU
+    intent_score: 85
+    when:
+      all:
+        - { type: page_type, page_type: pricing, min_seconds: 45, min_views: 1 }
+        - { type: total, min_active_seconds: 120 }
+      none:
+        # One drive-by look at pricing and nothing else is not bottom of funnel.
+        - { type: total, max_distinct_pages: 1 }
+
+  - name: Returned to pricing
+    stage: BOFU
+    intent_score: 80
+    when:
+      all:
+        - { type: page_type, page_type: pricing, min_views: 2, min_seconds: 30 }
+        - { type: total, min_sessions: 2 }
+
+  - name: Read the plan comparison
+    stage: BOFU
+    intent_score: 78
+    when:
+      all:
+        - { type: section, name: pricing, min_seconds: 40 }
+
+  - name: Evaluating — deep on solutions or features
+    stage: MOFU
+    intent_score: 60
+    when:
+      all:
+        - { type: total, min_active_seconds: 90 }
+      any:
+        - { type: page_type, page_type: solutions,    min_seconds: 45 }
+        - { type: page_type, page_type: features,     min_seconds: 45 }
+        - { type: page_type, page_type: comparison,   min_seconds: 30 }
+        - { type: page_type, page_type: testimonials, min_seconds: 40 }
+
+  - name: Evaluating — breadth across the site
+    stage: MOFU
+    intent_score: 50
+    when:
+      all:
+        - { type: total, min_distinct_pages: 3, min_active_seconds: 120 }
+
+  # Guarded by min_measured_visits: without it this fires on every lead whose
+  # visits predate engagement tracking (0 seconds ≤ 30), demoting them to TOFU.
+  # "Barely stayed" must mean measured-and-short, never simply unmeasured.
+  - name: Just browsing
+    stage: TOFU
+    intent_score: 15
+    when:
+      all:
+        - { type: total, max_active_seconds: 30, min_measured_visits: 1 }
+
+# --- Gates: minimum evidence the LLM's stage must clear ---------------------
+# Applied only when no rule matched. A stage that fails its gate is downgraded
+# one step (BOFU -> MOFU -> TOFU), so the model can't promote a 3-second visit.
+gates:
+  BOFU:
+    min_active_seconds: 90
+    min_lean_seconds: { BOFU: 40 }      # 40s of *active* time on BOFU pages
+    min_pageviews: 2
+  MOFU:
+    min_active_seconds: 40
+    min_pageviews: 2

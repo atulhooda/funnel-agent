@@ -10,7 +10,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from config.loader import resolve_page_type
+from config.loader import get_config, resolve_page_type
 from db import repositories as repo
 from db.connection import transaction
 from tracking import geo
@@ -18,13 +18,53 @@ from tracking import geo
 # anonymous_ids with an in-flight geo lookup, so repeated events don't re-hit the API
 _geo_inflight: set[tuple[str, str]] = set()
 
+ENGAGEMENT_EVENT = "page_engagement"
+MAX_SECTIONS = 50            # per engagement ping — bounds a hostile/buggy client
+
+
+def _sanitize_engagement(metadata: Optional[dict[str, Any]], site_id: str) -> dict[str, Any]:
+    """Clamp a client-reported engagement delta.
+
+    The browser is untrusted: active_ms and every section duration are clamped to
+    the configured per-ping cap so no client can inflate its way to BOFU.
+    """
+    md = dict(metadata or {})
+    cap_ms = int((get_config("stage_rules", site_id).get("engagement") or {})
+                 .get("dwell_cap_seconds", 1800)) * 1000
+
+    def _clamp_ms(value: Any) -> int:
+        try:
+            n = int(float(value))
+        except (TypeError, ValueError):
+            return 0
+        return max(0, min(cap_ms, n))
+
+    md["active_ms"] = _clamp_ms(md.get("active_ms"))
+    md["elapsed_ms"] = _clamp_ms(md.get("elapsed_ms"))
+
+    try:
+        md["scroll_pct"] = max(0, min(100, int(float(md.get("scroll_pct", 0)))))
+    except (TypeError, ValueError):
+        md["scroll_pct"] = 0
+
+    sections = md.get("sections")
+    clean: dict[str, int] = {}
+    if isinstance(sections, dict):
+        for name, ms in list(sections.items())[:MAX_SECTIONS]:
+            key = str(name).strip()[:60]
+            value = _clamp_ms(ms)
+            if key and value > 0:
+                clean[key] = value
+    md["sections"] = clean
+    return md
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
 async def _resolve_geo(site_id: str, anonymous_id: str, ip: str) -> None:
-    """Background: resolve IP -> geo and store it on the identity (best-effort)."""
+    """Background: resolve IP -> approximate geo and store it (best-effort)."""
     key = (site_id, anonymous_id)
     try:
         loc = await geo.lookup_ip(ip)
@@ -34,12 +74,58 @@ async def _resolve_geo(site_id: str, anonymous_id: str, ip: str) -> None:
             await repo.set_identity_geo(
                 cur, site_id, anonymous_id,
                 country=loc["country"], region=loc["region"], city=loc["city"],
+                postal=loc.get("postal"), isp=loc.get("isp"),
                 lat=loc.get("lat"), lng=loc.get("lng"),
             )
     except Exception:
         pass  # geo is optional; never surface ingestion errors
     finally:
         _geo_inflight.discard(key)
+
+
+async def record_precise_location(
+    *,
+    site_id: str,
+    anonymous_id: str,
+    latitude: float,
+    longitude: float,
+    accuracy_m: Optional[float] = None,
+) -> dict:
+    """Store a consented browser GPS fix, then name it in the background.
+
+    The coordinates are saved immediately (so nothing is lost if the reverse
+    geocode fails or is slow) and the street/neighbourhood is filled in after.
+    """
+    accuracy = int(accuracy_m) if accuracy_m is not None else None
+
+    async with transaction() as cur:
+        await repo.get_or_create_identity(cur, site_id, anonymous_id)
+        await repo.set_identity_precise_location(
+            cur, site_id, anonymous_id,
+            lat=latitude, lng=longitude, accuracy_m=accuracy,
+        )
+
+    asyncio.create_task(_name_location(site_id, anonymous_id, latitude, longitude, accuracy))
+    return {"anonymous_id": anonymous_id, "accuracy_m": accuracy}
+
+
+async def _name_location(site_id: str, anonymous_id: str, lat: float, lng: float,
+                         accuracy_m: Optional[int]) -> None:
+    """Background: reverse-geocode a GPS fix into street + neighbourhood."""
+    try:
+        place = await geo.reverse_geocode(lat, lng)
+        if not place:
+            return
+        async with transaction() as cur:
+            await repo.set_identity_precise_location(
+                cur, site_id, anonymous_id,
+                lat=lat, lng=lng, accuracy_m=accuracy_m,
+                street=place.get("street"), district=place.get("district"),
+                city=place.get("city"), region=place.get("region"),
+                country=place.get("country"), postal=place.get("postal"),
+            )
+    except Exception:
+        pass  # naming is a bonus; the coordinates are already stored
 
 
 def _ensure_utc(dt: Optional[datetime]) -> datetime:
@@ -68,6 +154,8 @@ async def track_event(
     occurred_at = _ensure_utc(timestamp)
     page_type, _lean = resolve_page_type(url, site_id)
     is_heartbeat = event_type == "heartbeat"
+    if event_type == ENGAGEMENT_EVENT:
+        metadata = _sanitize_engagement(metadata, site_id)
 
     async with transaction() as cur:
         identity = await repo.get_or_create_identity(cur, site_id, anonymous_id)

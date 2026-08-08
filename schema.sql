@@ -68,6 +68,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS leads_site_phone_uniq
 -- Added after v1: idempotent for databases created before scoring_error existed.
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS scoring_error TEXT;
 
+-- Stage provenance: which rule (or the model) set funnel_stage, and the evidence
+-- behind it — so every stage on the dashboard can be explained, not just asserted.
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS stage_source TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS stage_reason TEXT;
+
 -- ---------------------------------------------------------------------------
 -- Identities: maps an anonymous_id (browser/device) to a lead once known.
 --   A lead may accumulate several anonymous_ids over time (multi-device).
@@ -97,6 +102,19 @@ ALTER TABLE identities ADD COLUMN IF NOT EXISTS city      TEXT;
 ALTER TABLE identities ADD COLUMN IF NOT EXISTS timezone  TEXT;
 ALTER TABLE identities ADD COLUMN IF NOT EXISTS latitude  DOUBLE PRECISION;
 ALTER TABLE identities ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+
+-- Finer location detail. `district` is the neighbourhood/locality inside a city
+-- ("Koregaon Park"), `street` the road. Both are only trustworthy when
+-- location_source = 'gps': an IP resolves to the ISP's gateway, which for mobile
+-- carriers can be a different city entirely, so accuracy_m stays NULL there and
+-- the UI labels it approximate.
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS district        TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS street          TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS postal          TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS isp             TEXT;
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS accuracy_m      INTEGER;   -- GPS only
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS location_source TEXT;      -- 'ip' | 'gps'
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS located_at      TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS identities_site_lead_idx ON identities (site_id, lead_id);
 
 -- ---------------------------------------------------------------------------
