@@ -306,7 +306,7 @@
     document.getElementById("live-n").textContent = rows.length;
     document.getElementById("live-card").classList.toggle("has-live", rows.length>0);
     document.getElementById("live-hint").textContent =
-      rows.length ? `on the site now · updates every 5s` : `no one on the site right now · updates every 5s`;
+      rows.length ? `on the site now · updates every 3s` : `no one on the site right now · updates every 3s`;
     body("live").innerHTML = rows.map(v=>{
       const label = v.name || v.email;
       const named = !!label;
@@ -527,7 +527,7 @@
   refresh();
   refreshLive();
   setInterval(refresh, 20000);      // leads + summary data
-  setInterval(refreshLive, 5000);   // live-now panel (faster cadence)
+  setInterval(refreshLive, 3000);   // live-now panel (faster cadence)
 </script>
 </body>
 </html>

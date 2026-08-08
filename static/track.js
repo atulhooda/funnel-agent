@@ -125,7 +125,7 @@
     // Presence heartbeat — powers the dashboard "Live now" view. Lightweight,
     // visibility-aware (paused when the tab is hidden), and stored as presence
     // only (never an event), so it can't bloat history or skew scoring.
-    var HEARTBEAT_MS = 15000;
+    var HEARTBEAT_MS = 10000;
     function heartbeat() { if (document.visibilityState === 'visible') track('heartbeat'); }
     setInterval(heartbeat, HEARTBEAT_MS);
     document.addEventListener('visibilitychange', heartbeat);

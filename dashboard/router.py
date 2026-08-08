@@ -27,7 +27,7 @@ _TPL_DIR = pathlib.Path(__file__).resolve().parent / "templates"
 TEMPLATE = _TPL_DIR / "dashboard.html"
 INSIGHTS_TEMPLATE = _TPL_DIR / "insights.html"
 
-LIVE_WINDOW_SECONDS = 45   # a visitor counts as "live" if seen within this window
+LIVE_WINDOW_SECONDS = 24   # "live" if seen within this window (≈2.4× the 10s heartbeat, so no flicker)
 INSIGHTS_DAYS = 14         # trend window for the insights page
 DWELL_CAP_SECONDS = 1800   # cap a single page's counted dwell so idle time isn't over-counted
 
