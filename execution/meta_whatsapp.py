@@ -38,8 +38,8 @@ class MetaWhatsAppSender(Sender):
         # transport is injectable so the request logic can be tested without network.
         self._transport = transport
 
-    def _payload(self, to: str, message: str, s) -> dict:
-        if s.meta_wa_message_type == "template":
+    def _payload(self, to: str, message: str, s, use_template: bool) -> dict:
+        if use_template:
             template: dict = {"name": s.meta_wa_template_name, "language": {"code": s.meta_wa_template_lang}}
             if s.meta_wa_template_body_param:
                 template["components"] = [
@@ -61,9 +61,23 @@ class MetaWhatsAppSender(Sender):
         if not to_digits:
             return SendResult(ok=False, detail="no recipient number")
 
+        # Text vs template is decided per CONVERSATION, not by static config:
+        # free text only delivers inside the 24h customer-service window, and
+        # that window depends on when this particular contact last wrote to us.
+        # The configured message_type acts as the ceiling — a deployment pinned
+        # to templates stays on templates.
+        #
+        # The window fallback requires a template to actually exist. Forcing
+        # type=template with META_WA_TEMPLATE_NAME unset (the default) would post
+        # {"name": ""} to Graph and fail every send — including first contact with
+        # someone who has no conversation history, which is every cold lead.
+        use_template = s.meta_wa_message_type == "template"
+        if not use_template and not metadata.get("window_open", True) and s.meta_wa_template_name:
+            use_template = True
+
         url = f"https://graph.facebook.com/{s.meta_wa_api_version}/{s.meta_wa_phone_number_id}/messages"
         headers = {"Authorization": f"Bearer {s.meta_wa_access_token}", "Content-Type": "application/json"}
-        payload = self._payload(to_digits, message, s)
+        payload = self._payload(to_digits, message, s, use_template)
 
         try:
             async with httpx.AsyncClient(timeout=15.0, transport=self._transport) as client:

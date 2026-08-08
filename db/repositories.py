@@ -208,12 +208,27 @@ async def find_lead_by_email(cur, site_id: str, email: str) -> Optional[dict]:
     return await cur.fetchone()
 
 
-async def find_lead_by_phone(cur, site_id: str, phone: str) -> Optional[dict]:
+async def find_lead_by_phone_exact(cur, site_id: str, phone: str) -> Optional[dict]:
     await cur.execute(
         "SELECT * FROM leads WHERE site_id = %s AND phone = %s LIMIT 1",
         (site_id, phone),
     )
     return await cur.fetchone()
+
+
+async def find_lead_by_phone(cur, site_id: str, phone: str) -> Optional[dict]:
+    """Match a lead by phone, comparing digits only.
+
+    The same person reaches us as '+91 96995 30806' from a form and '919699530806'
+    from WhatsApp. Comparing the raw strings would treat those as two people and
+    create a duplicate lead, so every lookup normalizes first.
+    """
+    import re as _re
+
+    digits = _re.sub(r"\D", "", phone or "")
+    if not digits:
+        return None
+    return await find_lead_by_phone_digits(cur, site_id, digits)
 
 
 async def create_lead(
@@ -991,3 +1006,297 @@ async def list_sent_messages(cur, site_id: str) -> list[dict]:
         (site_id,),
     )
     return await cur.fetchall()
+
+
+# --------------------------------------------------------------------------- #
+# conversations + messages (Layer 4 — two-way messaging)
+# --------------------------------------------------------------------------- #
+
+async def get_or_create_conversation(
+    cur, site_id: str, *, channel: str, contact: str, lead_id: Optional[int] = None
+) -> dict:
+    """Return the thread for (channel, contact), creating it if new.
+
+    The no-op DO UPDATE makes RETURNING yield the existing row on conflict. A
+    lead_id is only ever filled in, never cleared — an inbound message can create
+    the thread before we know who it is from.
+    """
+    await cur.execute(
+        """
+        INSERT INTO conversations (site_id, channel, contact, lead_id)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (site_id, channel, contact)
+        DO UPDATE SET lead_id = COALESCE(conversations.lead_id, EXCLUDED.lead_id)
+        RETURNING *
+        """,
+        (site_id, channel, contact, lead_id),
+    )
+    return await cur.fetchone()
+
+
+async def attach_conversation_lead(cur, site_id: str, conversation_id: int, lead_id: int) -> None:
+    await cur.execute(
+        "UPDATE conversations SET lead_id = %s WHERE site_id = %s AND id = %s",
+        (lead_id, site_id, conversation_id),
+    )
+    # Backfill the thread's history so earlier anonymous messages follow the lead.
+    await cur.execute(
+        "UPDATE messages SET lead_id = %s WHERE site_id = %s AND conversation_id = %s AND lead_id IS NULL",
+        (lead_id, site_id, conversation_id),
+    )
+
+
+async def insert_message(
+    cur,
+    *,
+    site_id: str,
+    conversation_id: int,
+    lead_id: Optional[int],
+    direction: str,
+    channel: str,
+    body: Optional[str],
+    message_type: str = "text",
+    media: Optional[dict] = None,
+    status: str = "queued",
+    error: Optional[str] = None,
+    provider_message_id: Optional[str] = None,
+    sender_type: Optional[str] = None,
+    decision_id: Optional[int] = None,
+    sent_message_id: Optional[int] = None,
+    occurred_at: Optional[datetime] = None,
+) -> Optional[dict]:
+    """Append a message. Returns None when provider_message_id was already stored
+    (webhook retry) so callers can treat redelivery as a no-op."""
+    await cur.execute(
+        """
+        INSERT INTO messages (site_id, conversation_id, lead_id, direction, channel, body,
+                              message_type, media, status, error, provider_message_id,
+                              sender_type, decision_id, sent_message_id, occurred_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, COALESCE(%s, now()))
+        ON CONFLICT (site_id, provider_message_id) WHERE provider_message_id IS NOT NULL
+        DO NOTHING
+        RETURNING *
+        """,
+        (site_id, conversation_id, lead_id, direction, channel, body, message_type,
+         Jsonb(media or {}), status, error, provider_message_id, sender_type,
+         decision_id, sent_message_id, occurred_at),
+    )
+    return await cur.fetchone()
+
+
+async def touch_conversation(
+    cur, site_id: str, conversation_id: int, *,
+    direction: str, at: datetime, window_hours: int = 24, unread: bool = False,
+) -> dict:
+    """Advance a thread's activity clocks after a message.
+
+    An inbound message also restarts the customer-service window — the only event
+    that does. GREATEST(...) keeps the columns monotonic so an out-of-order
+    webhook redelivery can't wind the clock backwards.
+    """
+    if direction == "in":
+        await cur.execute(
+            """
+            UPDATE conversations
+               SET last_inbound_at   = GREATEST(COALESCE(last_inbound_at, %s), %s),
+                   last_message_at   = GREATEST(COALESCE(last_message_at, %s), %s),
+                   window_expires_at = GREATEST(COALESCE(window_expires_at, %s),
+                                                %s + make_interval(hours => %s)),
+                   unread_count      = unread_count + %s,
+                   status            = 'open'
+             WHERE site_id = %s AND id = %s
+            RETURNING *
+            """,
+            (at, at, at, at, at, at, window_hours, 1 if unread else 0, site_id, conversation_id),
+        )
+    else:
+        await cur.execute(
+            """
+            UPDATE conversations
+               SET last_outbound_at = GREATEST(COALESCE(last_outbound_at, %s), %s),
+                   last_message_at  = GREATEST(COALESCE(last_message_at, %s), %s)
+             WHERE site_id = %s AND id = %s
+            RETURNING *
+            """,
+            (at, at, at, at, site_id, conversation_id),
+        )
+    return await cur.fetchone()
+
+
+async def update_message_status(
+    cur, site_id: str, provider_message_id: str, *,
+    status: str, at: Optional[datetime] = None, error: Optional[str] = None,
+) -> Optional[dict]:
+    """Apply a provider delivery receipt.
+
+    Status only moves FORWARD along queued -> sent -> delivered -> read: Meta
+    delivers receipts out of order, and a late 'sent' must not undo a 'read'.
+    'failed' always wins, since it is terminal.
+    """
+    await cur.execute(
+        """
+        UPDATE messages
+           SET status = CASE
+                          WHEN %s = 'failed' THEN 'failed'
+                          WHEN messages.status = 'failed' THEN 'failed'
+                          WHEN array_position(ARRAY['queued','sent','delivered','read'], %s)
+                             > array_position(ARRAY['queued','sent','delivered','read'], messages.status)
+                          THEN %s
+                          ELSE messages.status
+                        END,
+               delivered_at = CASE WHEN %s IN ('delivered','read')
+                                   THEN COALESCE(delivered_at, COALESCE(%s, now())) ELSE delivered_at END,
+               read_at      = CASE WHEN %s = 'read'
+                                   THEN COALESCE(read_at, COALESCE(%s, now())) ELSE read_at END,
+               error        = COALESCE(%s, error)
+         WHERE site_id = %s AND provider_message_id = %s
+        RETURNING *
+        """,
+        (status, status, status, status, at, status, at, error, site_id, provider_message_id),
+    )
+    return await cur.fetchone()
+
+
+async def finalize_message(
+    cur, site_id: str, message_id: int, *,
+    status: str, error: Optional[str] = None, provider_message_id: Optional[str] = None,
+    sent_message_id: Optional[int] = None,
+) -> Optional[dict]:
+    """Stamp a queued outbound row with its provider id and send outcome.
+
+    Never downgrades: if a delivery receipt already advanced this row past 'sent'
+    in the moments after transmission, the late 'sent' must not undo it.
+    """
+    await cur.execute(
+        """
+        UPDATE messages
+           SET provider_message_id = COALESCE(%s, provider_message_id),
+               sent_message_id    = COALESCE(%s, sent_message_id),
+               error  = COALESCE(%s, error),
+               status = CASE
+                          WHEN %s = 'failed' THEN 'failed'
+                          WHEN array_position(ARRAY['queued','sent','delivered','read'], %s)
+                             > array_position(ARRAY['queued','sent','delivered','read'], messages.status)
+                          THEN %s
+                          ELSE messages.status
+                        END
+         WHERE site_id = %s AND id = %s
+        RETURNING *
+        """,
+        (provider_message_id, sent_message_id, error, status, status, status, site_id, message_id),
+    )
+    return await cur.fetchone()
+
+
+async def park_receipt(
+    cur, site_id: str, provider_message_id: str, *,
+    status: str, error: Optional[str] = None, at: Optional[datetime] = None,
+) -> None:
+    """Hold a receipt whose message row is not addressable yet.
+
+    Keeps the furthest-along status if several arrive before the message lands.
+    """
+    await cur.execute(
+        """
+        INSERT INTO pending_receipts (site_id, provider_message_id, status, error, occurred_at)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (site_id, provider_message_id) DO UPDATE
+        SET status = CASE
+                       WHEN EXCLUDED.status = 'failed' THEN 'failed'
+                       WHEN pending_receipts.status = 'failed' THEN 'failed'
+                       WHEN array_position(ARRAY['queued','sent','delivered','read'], EXCLUDED.status)
+                          > array_position(ARRAY['queued','sent','delivered','read'], pending_receipts.status)
+                       THEN EXCLUDED.status
+                       ELSE pending_receipts.status
+                     END,
+            error       = COALESCE(EXCLUDED.error, pending_receipts.error),
+            occurred_at = COALESCE(EXCLUDED.occurred_at, pending_receipts.occurred_at)
+        """,
+        (site_id, provider_message_id, status, error, at),
+    )
+
+
+async def take_parked_receipt(cur, site_id: str, provider_message_id: str) -> Optional[dict]:
+    """Pop a parked receipt, if one is waiting for this provider id."""
+    await cur.execute(
+        "DELETE FROM pending_receipts WHERE site_id = %s AND provider_message_id = %s RETURNING *",
+        (site_id, provider_message_id),
+    )
+    return await cur.fetchone()
+
+
+async def mark_conversation_read(cur, site_id: str, conversation_id: int) -> None:
+    await cur.execute(
+        "UPDATE conversations SET unread_count = 0 WHERE site_id = %s AND id = %s",
+        (site_id, conversation_id),
+    )
+
+
+async def get_conversation(cur, site_id: str, conversation_id: int) -> Optional[dict]:
+    await cur.execute(
+        "SELECT * FROM conversations WHERE site_id = %s AND id = %s", (site_id, conversation_id)
+    )
+    return await cur.fetchone()
+
+
+async def list_conversations(cur, site_id: str, limit: int = 200) -> list[dict]:
+    """Inbox list: newest activity first, with the last message inlined."""
+    await cur.execute(
+        """
+        SELECT c.*, l.name AS lead_name, l.email AS lead_email,
+               l.funnel_stage, l.intent_score,
+               m.body AS last_body, m.direction AS last_direction, m.status AS last_status,
+               (c.window_expires_at IS NOT NULL AND c.window_expires_at > now()) AS window_open
+        FROM conversations c
+        LEFT JOIN leads l ON l.site_id = c.site_id AND l.id = c.lead_id
+        LEFT JOIN LATERAL (
+            SELECT body, direction, status FROM messages m
+            WHERE m.conversation_id = c.id
+            ORDER BY m.occurred_at DESC, m.id DESC LIMIT 1
+        ) m ON true
+        WHERE c.site_id = %s
+        ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC
+        LIMIT %s
+        """,
+        (site_id, limit),
+    )
+    return await cur.fetchall()
+
+
+async def list_messages(cur, site_id: str, conversation_id: int, limit: int = 500) -> list[dict]:
+    """Thread contents, oldest first. Newest rows are kept when truncating."""
+    await cur.execute(
+        """
+        SELECT * FROM (
+            SELECT id, direction, channel, body, message_type, media, status, error,
+                   provider_message_id, sender_type, decision_id,
+                   occurred_at, delivered_at, read_at
+            FROM messages
+            WHERE site_id = %s AND conversation_id = %s
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT %s
+        ) t ORDER BY occurred_at ASC, id ASC
+        """,
+        (site_id, conversation_id, limit),
+    )
+    return await cur.fetchall()
+
+
+async def find_lead_by_phone_digits(cur, site_id: str, digits: str) -> Optional[dict]:
+    """Match a lead by phone ignoring '+', spaces and punctuation.
+
+    Inbound WhatsApp gives bare E.164 digits while leads are stored however the
+    form captured them, so a literal comparison would miss almost every match.
+    """
+    if not digits:
+        return None
+    await cur.execute(
+        """
+        SELECT * FROM leads
+        WHERE site_id = %s AND phone IS NOT NULL
+          AND regexp_replace(phone, '\\D', '', 'g') = %s
+        ORDER BY id LIMIT 1
+        """,
+        (site_id, digits),
+    )
+    return await cur.fetchone()

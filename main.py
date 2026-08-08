@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from config import loader
 from config.settings import get_settings
@@ -24,6 +25,8 @@ from db.connection import close_pool, ensure_schema, open_pool, transaction
 from decision.router import router as decision_router
 from deps import require_admin
 from execution.router import router as execution_router
+from messaging.router import admin_router as messaging_admin_router
+from messaging.router import public_router as messaging_public_router
 from scheduler import loop as scheduler
 from scheduler.router import router as scheduler_router
 from scoring.router import router as scoring_router
@@ -73,12 +76,17 @@ app.add_middleware(
 # Public (browser ingestion, guarded by its own write-key): tracking only.
 app.include_router(tracking_router)
 
+# Public because Meta calls it: the WhatsApp webhook authenticates itself with a
+# verify token (GET handshake) and an HMAC signature (POST), not admin auth.
+app.include_router(messaging_public_router)
+
 # Admin-only: the control routes and the dashboard sit behind HTTP Basic auth.
 _admin = [Depends(require_admin)]
 app.include_router(scoring_router, dependencies=_admin)
 app.include_router(decision_router, dependencies=_admin)
 app.include_router(execution_router, dependencies=_admin)
 app.include_router(scheduler_router, dependencies=_admin)
+app.include_router(messaging_admin_router, dependencies=_admin)
 app.include_router(dashboard_router, dependencies=_admin)
 
 
@@ -104,12 +112,21 @@ async def track_js() -> FileResponse:
 
 @app.get("/world.js", include_in_schema=False)
 async def world_js() -> FileResponse:
-    """Equirectangular world land path (window.WORLD_LAND) for the live map page."""
+    """Equirectangular world land path (window.WORLD_LAND).
+
+    Kept as the live map's offline fallback: if OpenStreetMap tiles can't be
+    reached, the map still draws continents and visitor dots.
+    """
     return FileResponse(
         STATIC / "world.js",
         media_type="application/javascript",
         headers={"Cache-Control": "public, max-age=86400"},
     )
+
+
+# Vendored third-party assets (Leaflet — BSD-2). Served from our own origin so the
+# dashboard has no CDN dependency and works on a locked-down network.
+app.mount("/vendor", StaticFiles(directory=STATIC / "vendor"), name="vendor")
 
 
 @app.get("/demo", include_in_schema=False)

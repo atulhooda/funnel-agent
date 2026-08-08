@@ -44,6 +44,19 @@ class Settings(BaseSettings):
     meta_wa_template_lang: str = "en_US"
     meta_wa_template_body_param: bool = True   # False for zero-variable templates (e.g. hello_world)
 
+    # Inbound WhatsApp webhook (Meta calls US). Both are required to receive:
+    #   verify_token — the string you type into Meta's "Verify token" box; echoed
+    #                  back during the one-time GET handshake.
+    #   app_secret   — Meta app secret, used to check the X-Hub-Signature-256 HMAC
+    #                  on every POST. Without it the endpoint is unauthenticated
+    #                  and anyone could inject fake messages, so it fails closed.
+    meta_wa_verify_token: str = ""
+    meta_wa_app_secret: str = ""
+    # Meta allows ONE callback URL per app. If another service (e.g. an OTP flow)
+    # needs the same events, set this to its URL and every verified payload is
+    # forwarded there verbatim, best-effort, after we store it.
+    meta_wa_forward_url: str = ""
+
     # Apply schema.sql on startup (idempotent) — makes deploy one-click on any host.
     run_schema_on_startup: bool = True
 

@@ -56,6 +56,77 @@ thresholds, the rule list with a condition builder, and the gates. Saves go to t
 `site_config` table and apply immediately, no redeploy. Set `mode` there to
 `rules_first` (default), `rules_only`, or `llm_only`.
 
+## Two-way messaging
+
+Outreach used to be one-way: the agent decided, sent, and logged. Anyone replying
+to a "WhatsApp Us" link vanished. [messaging/](messaging/) adds the conversation
+around the send — inbound capture, threading, and delivery state.
+
+**The 24-hour window is the rule that shapes everything.** WhatsApp only allows
+free-form text within 24 hours of the *contact's* last message; outside it Meta
+requires an approved template. That is per-conversation state — it moves every
+time they write to you — so it lives on the conversation row and is consulted at
+send time. `META_WA_MESSAGE_TYPE` is now a ceiling, not the decision: a text-mode
+deployment automatically switches to your template when a contact goes cold
+(and stays on text if no template is configured).
+
+Setup — in the Meta app dashboard, WhatsApp → Configuration → Webhook:
+
+| Field | Value |
+|---|---|
+| Callback URL | `https://YOUR_APP/webhooks/whatsapp` |
+| Verify token | whatever you set as `META_WA_VERIFY_TOKEN` |
+| Subscribe to | `messages` |
+
+Then set `META_WA_APP_SECRET` (Meta app secret). Every POST is checked against
+its `X-Hub-Signature-256` HMAC; without the secret the endpoint returns 503
+rather than trusting an unauthenticated public URL.
+
+Meta allows **one callback URL per app**. If another service needs the same
+events, point Meta here and set `META_WA_FORWARD_URL` — verified payloads are
+relayed on verbatim after we store them.
+
+What it does:
+* **Inbound** — replies land in a thread. An unknown number becomes a lead
+  (named from their WhatsApp profile) so it gets scored like any other, but with
+  **no** consent flags: writing in authorizes a reply, not cold outreach later.
+* **Idempotent** — Meta redelivers until it gets a 2xx; every message and receipt
+  is deduplicated on its `wamid`.
+* **Delivery state** — sent → delivered → read → failed, applied forward-only so
+  out-of-order receipts can't undo a later one. A receipt that arrives before we
+  finish recording the send is parked and applied when the id lands.
+* **Identity** — phone matching compares digits, so `+91 96995 30806` from a form
+  and `919699530806` from WhatsApp are one lead, not two.
+
+API: `GET /api/conversations`, `GET /api/conversations/{id}`,
+`POST /api/conversations/{id}/reply`, `POST /api/conversations/{id}/read`.
+A human reply skips the outreach guardrails (rate limit, send window) — those
+govern the agent's cold outreach, not a person answering someone who wrote in.
+
+## The live map
+
+[Leaflet](https://leafletjs.com) (BSD-2) over [OpenStreetMap](https://www.openstreetmap.org)
+tiles (ODbL) — both free and open source, no API key, no account. Leaflet is
+vendored under [static/vendor/](static/vendor/) and served from our own origin, so
+the dashboard has no CDN dependency.
+
+Zoom runs from 2 (whole world) to 19 (individual buildings), which is what makes a
+consented GPS fix worth having: you can see the actual street. Scroll to zoom,
+drag to pan, **Fit all** reframes every visitor. The view is only auto-fitted
+once — the 3-second refresh never yanks your pan or zoom back.
+
+GPS visitors are drawn with their accuracy radius as a circle, so a ±2 km Wi-Fi
+guess visibly differs from a ±12 m lock.
+
+Two things worth knowing:
+* OSM tiles are fetched from `tile.openstreetmap.org` at render time. Their
+  [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) covers
+  low-volume use like an internal dashboard; attribution is displayed as required.
+  Tile requests reveal the viewport to the OSM servers — not visitor data, but
+  worth knowing before pointing this at a customer-facing page.
+* If tiles can't be reached (offline, blocked network), the map falls back to the
+  self-hosted `world.js` outline and says so, rather than showing an empty grey box.
+
 ## How precise is a visitor's location?
 
 Two sources, and the difference matters:
