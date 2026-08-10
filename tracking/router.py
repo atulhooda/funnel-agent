@@ -24,6 +24,7 @@ async def track(body: TrackRequest, request: Request, site_id: str = Depends(get
         request.headers.get("x-forwarded-for"),
         request.headers.get("x-real-ip"),
         request.client.host if request.client else None,
+        request.headers.get("cf-connecting-ip"),
     )
     client_tz = body.metadata.get("tz") if isinstance(body.metadata, dict) else None
     result = await service.track_event(

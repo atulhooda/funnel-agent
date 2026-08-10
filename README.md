@@ -232,6 +232,36 @@ Try it locally: **`open http://localhost:8000/demo`** — a sample page wired wi
 snippet. Click around and submit the form, then refresh the dashboard to watch the
 new visitor flow through scoring → decision.
 
+### Custom domain behind Cloudflare (recommended)
+
+Some ISPs refuse to resolve `*.up.railway.app` — observed live on Jio, where the
+resolver returns `REFUSED` for that zone while answering everything else. Any
+visitor on such a network silently fails to load `track.js`, so you lose their
+data without an error anywhere.
+
+Serving the app from your own domain fixes it, but **only if Cloudflare proxies
+it**. A DNS-only (grey cloud) record is a CNAME to `*.up.railway.app`, and a
+resolver that refuses that zone still fails when it follows the chain. Proxied
+(orange cloud), Cloudflare answers with its own IPs and resolves Railway from its
+network — the visitor's resolver never sees `railway.app` at all.
+
+1. **Railway** → service → Settings → Networking → *Custom Domain* → enter
+   `agent.yourdomain.com`. Railway shows a CNAME target.
+2. **Cloudflare** → DNS → add `CNAME  agent → <target>`, proxy **OFF** at first.
+   Railway validates and issues its certificate (it checks from its own side, so
+   your ISP's DNS is irrelevant here).
+3. Once Railway shows the domain as active, set proxy **ON** (orange cloud).
+4. **SSL/TLS → Overview → Full (strict)**. "Flexible" causes a redirect loop.
+5. Point the snippet at the new host and bump the version so browsers refetch:
+   `https://agent.yourdomain.com/track.js?v=2`
+
+Behind Cloudflare the app reads `CF-Connecting-IP` for visitor geo. Without it,
+every visitor's location would resolve to the first hop in `X-Forwarded-For`.
+
+Two Cloudflare settings worth checking: **Bot Fight Mode** can block Meta's
+webhook POSTs to `/webhooks/whatsapp`, and caching should be left on "Respect
+Existing Headers" so `track.js` honours its 5-minute max-age.
+
 ### Sending real WhatsApp (Meta Cloud API)
 
 A real sender ([execution/meta_whatsapp.py](execution/meta_whatsapp.py)) is wired

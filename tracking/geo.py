@@ -31,8 +31,22 @@ _USER_AGENT = "behavioral-funnel-agent/1.0 (visitor analytics; self-hosted)"
 _nominatim_lock = asyncio.Lock()
 
 
-def client_ip_from_headers(x_forwarded_for: Optional[str], x_real_ip: Optional[str], peer: Optional[str]) -> Optional[str]:
-    """Resolve the real client IP behind a proxy (Railway sets X-Forwarded-For)."""
+def client_ip_from_headers(
+    x_forwarded_for: Optional[str],
+    x_real_ip: Optional[str],
+    peer: Optional[str],
+    cf_connecting_ip: Optional[str] = None,
+) -> Optional[str]:
+    """Resolve the real client IP behind the proxy chain.
+
+    Order matters. With Cloudflare in front of Railway there are two proxies, and
+    X-Forwarded-For becomes a list that a client can also prepend to. Cloudflare's
+    own CF-Connecting-IP is a single value it sets itself, so it is both more
+    trustworthy and more accurate than the left-most XFF entry — without it, geo
+    for every visitor collapses to whatever the first hop reports.
+    """
+    if cf_connecting_ip:
+        return cf_connecting_ip.strip()
     if x_forwarded_for:
         # left-most entry is the original client
         return x_forwarded_for.split(",")[0].strip()
