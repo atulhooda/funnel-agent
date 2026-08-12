@@ -232,6 +232,26 @@ Try it locally: **`open http://localhost:8000/demo`** — a sample page wired wi
 snippet. Click around and submit the form, then refresh the dashboard to watch the
 new visitor flow through scoring → decision.
 
+### "The site won't load" — check DNS before Railway
+
+```bash
+./scripts/diagnose.sh
+```
+
+Tells you which of the two it is. A resolver that refuses the hostname and a
+server that is genuinely down look identical in a browser, and they have nothing
+to do with each other: this has already happened once, where a laptop's
+router-supplied resolver returned `REFUSED` for the whole `up.railway.app` zone
+while the service kept serving every visitor normally.
+
+If it says DNS, pin a resolver so it stops depending on whichever network you
+joined:
+
+```bash
+sudo networksetup -setdnsservers Wi-Fi 1.1.1.1 1.0.0.1 2606:4700:4700::1111 2606:4700:4700::1001
+sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
+```
+
 ### Custom domain behind Cloudflare (recommended)
 
 Some ISPs refuse to resolve `*.up.railway.app` — observed live on Jio, where the
