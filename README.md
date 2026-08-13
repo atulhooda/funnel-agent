@@ -56,6 +56,58 @@ thresholds, the rule list with a condition builder, and the gates. Saves go to t
 `site_config` table and apply immediately, no redeploy. Set `mode` there to
 `rules_first` (default), `rules_only`, or `llm_only`.
 
+## Turning an OTP verification into a named lead
+
+The moment someone passes an OTP check, call `/identify` with what you know. The
+visitor's whole prior history — every page, click and dwell second recorded while
+they were anonymous — is re-pointed to that lead, and they appear on the dashboard
+by name with their phone and email.
+
+**From your server (recommended, and required for the verified badge):**
+
+```bash
+curl -X POST https://YOUR_APP/identify \
+  -H 'Content-Type: application/json' \
+  -H 'X-Write-Key: YOUR_WRITE_KEY' \
+  -H 'X-Server-Key: YOUR_SERVER_KEY' \
+  -d '{
+        "anonymous_id":  "<from the browser: funnel.anonymousId()>",
+        "name":          "Priya Sharma",
+        "phone":         "+91 98765 43210",
+        "email":         "priya@clinic.com",
+        "phone_verified": true,
+        "whatsapp_opt_in": true,
+        "consent_source": "otp_verified"
+      }'
+```
+
+The browser has to hand you `window.funnel.anonymousId()` along with the OTP
+request — that cookie is what ties the anonymous browsing history to the person.
+
+**From the browser** (simpler, no `anonymous_id` plumbing) — `phone_verified` is
+ignored here, because anything a browser sends is attacker-controllable:
+
+```js
+window.funnel.identify({ name, phone, email, whatsapp_opt_in: true,
+                         consent_source: 'otp_verified' });
+```
+
+Three things worth knowing:
+
+* **Verified ≠ consented.** `phone_verified` records that the number provably
+  belongs to them. It never grants `whatsapp_opt_in` on its own — permission to
+  message is a separate, explicit field, and the guardrails still enforce it.
+* **Omitted opt-ins are left alone.** Sending `identify` without
+  `whatsapp_opt_in` no longer revokes consent granted earlier; pass `false`
+  explicitly to opt someone out.
+* **A verified number wins.** It overwrites whatever was stored, so a typo from a
+  form is replaced by the number they actually proved. Verification only ever goes
+  false → true.
+
+Set `SERVER_KEY` in the app's environment and send it as `X-Server-Key`. While it
+is unset, any caller can assert verification — fine for local work, not for
+production.
+
 ## Two-way messaging
 
 Outreach used to be one-way: the agent decided, sent, and logged. Anyone replying

@@ -44,10 +44,17 @@ class IdentifyRequest(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
-    email_opt_in: bool = False
-    whatsapp_opt_in: bool = False
+    # Optional on purpose: omitted means "not stated here, leave it alone".
+    # Defaulting these to False made any partial identify — updating a phone,
+    # confirming an OTP — silently revoke consent granted earlier.
+    email_opt_in: Optional[bool] = None
+    whatsapp_opt_in: Optional[bool] = None
     consent_timestamp: Optional[datetime] = None  # when consent was given; defaults to server now
     consent_source: Optional[str] = None
+    # Set true only after the number passed an OTP check. Asserting ownership is
+    # not the same as consent, so this never grants whatsapp_opt_in on its own.
+    # Honoured only for callers holding the server key — see require_server_key.
+    phone_verified: bool = False
 
     @model_validator(mode="after")
     def _require_contact(self) -> "IdentifyRequest":
@@ -63,3 +70,4 @@ class IdentifyResponse(BaseModel):
     created: bool                                 # True if a new lead was created
     anonymous_id: str
     backfilled_events: int                        # prior events re-pointed to the lead
+    phone_verified: bool = False                  # whether the lead now holds a verified number

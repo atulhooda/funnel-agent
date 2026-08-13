@@ -37,6 +37,23 @@ def require_write_key(x_write_key: Optional[str] = Header(default=None, alias="X
     return True
 
 
+def trusted_server_call(x_server_key: Optional[str] = Header(default=None, alias="X-Server-Key")) -> bool:
+    """True when the caller proved it is your backend, not a browser.
+
+    The write key ships inside the tracking snippet, so anything a browser can
+    send is attacker-controllable — including a claim like "this phone passed
+    OTP". Assertions of that kind are only believed from a caller holding
+    SERVER_KEY, which never leaves your server.
+
+    Unset SERVER_KEY means no enforcement, matching TRACK_WRITE_KEY's dev-friendly
+    behaviour. Set it before you rely on `phone_verified` meaning anything.
+    """
+    key = get_settings().server_key
+    if not key:
+        return True
+    return bool(x_server_key) and secrets.compare_digest(x_server_key, key)
+
+
 def require_admin(credentials: Optional[HTTPBasicCredentials] = Depends(_basic)) -> bool:
     """Gate the dashboard + internal control routes (/score, /decide, /execute).
 

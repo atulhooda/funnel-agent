@@ -180,6 +180,12 @@
     .timeline .jd{ font-size:11px; color:var(--muted); font-weight:500; margin-left:6px; }
     /* a visit that didn't clear its page type's minimum dwell */
     .timeline .jd.weak{ color:var(--crit); opacity:.75; text-decoration:line-through; }
+    .vfy { display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:650;
+           padding:1px 6px; border-radius:999px; vertical-align:middle;
+           color:var(--good-t); background:color-mix(in srgb,var(--good) 14%,transparent);
+           border:1px solid color-mix(in srgb,var(--good) 30%,transparent); }
+    .vfy svg { width:9px; height:9px; }
+    .contact .sep { margin:0 6px; opacity:.5; }
     .jwhy{ font-size:12px; color:var(--ink-2); background:var(--surface); border:1px solid var(--border-2);
            border-radius:9px; padding:8px 11px; margin-bottom:14px; line-height:1.45; }
     .jwhy b{ font-weight:640; }
@@ -281,6 +287,7 @@
     radio:'<circle cx="12" cy="12" r="2"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14M7.76 16.24a6 6 0 0 1 0-8.48M16.24 7.76a6 6 0 0 1 0 8.48M19.07 4.93a10 10 0 0 1 0 14.14"/>',
     chevron:'<path d="m9 18 6-6-6-6"/>', mouse:'<path d="m3 3 7.5 18 2.1-7.4 7.4-2.1L3 3z"/>',
     pin:'<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+    check:'<path d="M20 6 9 17l-5-5"/>',
     crosshair:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/>',
     grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     bars:'<path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6" rx="1"/><rect x="12" y="7" width="3" height="10" rx="1"/><rect x="17" y="14" width="3" height="3" rx="1"/>',
@@ -421,7 +428,11 @@
     const label = s.name || s.email;
     const named = !!label;
     const who = named ? esc(label) : ('Anonymous #'+id);
-    const subEmail = (s.name && s.email) ? `<div class="muted small">${esc(s.email)}</div>` : '';
+    const dContact = [
+      (s.name && s.email) ? esc(s.email) : "",
+      s.phone ? `${esc(s.phone)}${s.phone_verified ? ` <span class="vfy">${svg('check',9)} verified</span>` : ""}` : "",
+    ].filter(Boolean);
+    const subEmail = dContact.length ? `<div class="muted small contact">${dContact.join('<span class="sep">·</span>')}</div>` : '';
     const loc = locHtml(s);
     head.innerHTML =
       `<span class="av ${named?'':'anon'}">${named?esc(label[0].toUpperCase()):svg('user',15)}</span>`+
@@ -562,7 +573,14 @@
       const named = !!label;
       const av = named ? `<span class="av">${esc(label[0].toUpperCase())}</span>` : `<span class="av anon">${svg('user',13)}</span>`;
       const who = named ? `<span class="who">${esc(label)}</span>` : `<span class="who anon">Anonymous #${l.id}</span>`;
-      const subEmail = (l.name && l.email) ? `<div class="muted small" style="margin-top:2px">${esc(l.email)}</div>` : "";
+      // Contact details under the name. A phone that passed OTP is the strongest
+      // identifier a lead has, so it is shown with a badge rather than buried.
+      const contact = [
+        (l.name && l.email) ? esc(l.email) : "",
+        l.phone ? `${esc(l.phone)}${l.phone_verified ? ` <span class="vfy" title="verified by OTP${l.phone_verified_at?' · '+ts(l.phone_verified_at):''}">${svg('check',9)} verified</span>` : ""}` : "",
+      ].filter(Boolean);
+      const subEmail = contact.length
+        ? `<div class="muted small contact" style="margin-top:2px">${contact.join('<span class="sep">·</span>')}</div>` : "";
       const flag = l.scoring_error ? ` <span class="flag" title="${esc(l.scoring_error)}">⚠ flagged</span>` : "";
       const loc = locHtml(l);
       return `<tr data-lead-id="${l.id}" onclick="openLeadDetail(${l.id})">

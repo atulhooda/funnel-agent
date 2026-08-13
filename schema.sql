@@ -81,6 +81,13 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS scoring_error TEXT;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS stage_source TEXT;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS stage_reason TEXT;
 
+-- Proof of ownership, not permission. A phone that passed an OTP check is a very
+-- different thing from one typed into a form: it is known to belong to the person
+-- holding the handset. It still says nothing about whether they agreed to be
+-- messaged — that stays in whatsapp_opt_in / email_opt_in.
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone_verified    BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
+
 -- ---------------------------------------------------------------------------
 -- Identities: maps an anonymous_id (browser/device) to a lead once known.
 --   A lead may accumulate several anonymous_ids over time (multi-device).

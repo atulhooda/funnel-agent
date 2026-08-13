@@ -26,6 +26,10 @@ class Settings(BaseSettings):
 
     # Going live: browser ingestion + safety
     track_write_key: str = ""            # if set, /track & /identify require header X-Write-Key
+    # Proves a caller is your backend rather than a browser. Required to assert
+    # facts a browser must not be trusted with — today that is phone_verified on
+    # /identify. Unset = no enforcement (dev); set it before trusting the flag.
+    server_key: str = ""
     cors_allow_origins: str = "*"        # comma-separated site origins allowed to POST from the browser
     execution_mode: str = "shadow"       # "shadow" = always stub sends; "live" = use real senders
 

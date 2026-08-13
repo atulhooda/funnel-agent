@@ -216,11 +216,12 @@ async def identify(
     anonymous_id: str,
     email: Optional[str],
     phone: Optional[str],
-    email_opt_in: bool,
-    whatsapp_opt_in: bool,
+    email_opt_in: Optional[bool],
+    whatsapp_opt_in: Optional[bool],
     consent_timestamp: Optional[datetime],
     consent_source: Optional[str],
     name: Optional[str] = None,
+    phone_verified: bool = False,
 ) -> dict:
     """Resolve the anonymous_id to a lead, refresh consent, backfill events.
 
@@ -255,6 +256,7 @@ async def identify(
                 consent_timestamp=consent_ts,
                 consent_source=consent_source,
                 name=name,
+                phone_verified=phone_verified,
             )
             if current_lead_id and current_lead_id != lead["id"]:
                 await repo.delete_lead_if_anonymous_orphan(
@@ -271,6 +273,7 @@ async def identify(
                 consent_timestamp=consent_ts,
                 consent_source=consent_source,
                 name=name,
+                phone_verified=phone_verified,
             )
         else:
             created = True
@@ -279,11 +282,14 @@ async def identify(
                 site_id=site_id,
                 email=email,
                 phone=phone,
-                email_opt_in=email_opt_in,
-                whatsapp_opt_in=whatsapp_opt_in,
+                # A brand-new lead has no prior consent to preserve, so an
+                # unstated flag is simply "no".
+                email_opt_in=bool(email_opt_in),
+                whatsapp_opt_in=bool(whatsapp_opt_in),
                 consent_timestamp=consent_ts,
                 consent_source=consent_source,
                 name=name,
+                phone_verified=phone_verified,
             )
 
         await repo.link_identity(cur, site_id, anonymous_id, lead["id"])
@@ -294,4 +300,5 @@ async def identify(
         "created": created,
         "anonymous_id": anonymous_id,
         "backfilled_events": backfilled,
+        "phone_verified": bool(lead.get("phone_verified")),
     }

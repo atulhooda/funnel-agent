@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 
-from deps import get_site_id, require_write_key
+from deps import get_site_id, require_write_key, trusted_server_call
 from tracking import service
 from tracking.geo import client_ip_from_headers
 from tracking.schemas import (
@@ -68,7 +68,11 @@ async def locate(body: LocateRequest, site_id: str = Depends(get_site_id)) -> Lo
 
 
 @router.post("/identify", response_model=IdentifyResponse, dependencies=[Depends(require_write_key)])
-async def identify(body: IdentifyRequest, site_id: str = Depends(get_site_id)) -> IdentifyResponse:
+async def identify(
+    body: IdentifyRequest,
+    site_id: str = Depends(get_site_id),
+    trusted: bool = Depends(trusted_server_call),
+) -> IdentifyResponse:
     result = await service.identify(
         site_id=site_id,
         anonymous_id=body.anonymous_id,
@@ -79,6 +83,8 @@ async def identify(body: IdentifyRequest, site_id: str = Depends(get_site_id)) -
         whatsapp_opt_in=body.whatsapp_opt_in,
         consent_timestamp=body.consent_timestamp,
         consent_source=body.consent_source,
+        # A browser can claim anything; only a trusted caller's claim counts.
+        phone_verified=bool(body.phone_verified and trusted),
     )
     return IdentifyResponse(
         site_id=site_id,
@@ -86,4 +92,5 @@ async def identify(body: IdentifyRequest, site_id: str = Depends(get_site_id)) -
         created=result["created"],
         anonymous_id=result["anonymous_id"],
         backfilled_events=result["backfilled_events"],
+        phone_verified=result["phone_verified"],
     )

@@ -242,15 +242,18 @@ async def create_lead(
     consent_timestamp: datetime,
     consent_source: Optional[str],
     name: Optional[str] = None,
+    phone_verified: bool = False,
 ) -> dict:
     await cur.execute(
         """
         INSERT INTO leads
-            (site_id, name, email, phone, email_opt_in, whatsapp_opt_in, consent_timestamp, consent_source)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (site_id, name, email, phone, email_opt_in, whatsapp_opt_in, consent_timestamp,
+             consent_source, phone_verified, phone_verified_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CASE WHEN %s THEN now() END)
         RETURNING *
         """,
-        (site_id, name, email, phone, email_opt_in, whatsapp_opt_in, consent_timestamp, consent_source),
+        (site_id, name, email, phone, email_opt_in, whatsapp_opt_in, consent_timestamp,
+         consent_source, phone_verified, phone_verified),
     )
     return await cur.fetchone()
 
@@ -266,22 +269,38 @@ async def update_lead_consent(
     consent_timestamp: datetime,
     consent_source: Optional[str],
     name: Optional[str] = None,
+    phone_verified: bool = False,
 ) -> dict:
-    """Refresh consent (latest wins), fill in email/phone if missing, update name."""
+    """Refresh consent (latest wins), fill in email/phone if missing, update name.
+
+    A verified phone OVERWRITES whatever was stored: the usual COALESCE keeps the
+    first value seen, which would leave a typo from a form in place of the number
+    the person just proved they own. Verification itself only ever moves false ->
+    true; a later unverified identify must not silently downgrade it.
+    """
     await cur.execute(
         """
         UPDATE leads
         SET name              = COALESCE(%s, name),
             email             = COALESCE(email, %s),
-            phone             = COALESCE(phone, %s),
-            email_opt_in      = %s,
-            whatsapp_opt_in   = %s,
+            -- casts are required: a bare parameter inside IS NOT NULL gives
+            -- Postgres nothing to infer a type from
+            phone             = CASE WHEN %s::boolean AND %s::text IS NOT NULL
+                                     THEN %s::text ELSE COALESCE(phone, %s::text) END,
+            email_opt_in      = COALESCE(%s::boolean, email_opt_in),
+            whatsapp_opt_in   = COALESCE(%s::boolean, whatsapp_opt_in),
             consent_timestamp = %s,
-            consent_source    = %s
+            consent_source    = %s,
+            phone_verified    = leads.phone_verified OR %s,
+            phone_verified_at = CASE WHEN %s AND leads.phone_verified_at IS NULL
+                                     THEN now() ELSE leads.phone_verified_at END
         WHERE id = %s
         RETURNING *
         """,
-        (name, email, phone, email_opt_in, whatsapp_opt_in, consent_timestamp, consent_source, lead_id),
+        (name, email,
+         phone_verified, phone, phone, phone,
+         email_opt_in, whatsapp_opt_in, consent_timestamp, consent_source,
+         phone_verified, phone_verified, lead_id),
     )
     return await cur.fetchone()
 
@@ -1005,7 +1024,8 @@ async def insert_sent_message(
 async def list_leads(cur, site_id: str) -> list[dict]:
     await cur.execute(
         """
-        SELECT l.id, l.name, l.email, l.phone, l.email_opt_in, l.whatsapp_opt_in, l.consent_source,
+        SELECT l.id, l.name, l.email, l.phone, l.phone_verified, l.phone_verified_at,
+               l.email_opt_in, l.whatsapp_opt_in, l.consent_source,
                l.funnel_stage, l.intent_score, l.likely_objections, l.persona_signals,
                l.scored_at, l.scoring_error, l.stage_source, l.stage_reason, l.created_at,
                g.country, g.region, g.city, g.timezone,
