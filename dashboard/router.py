@@ -15,6 +15,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -91,14 +92,41 @@ async def insights_page() -> HTMLResponse:
     return HTMLResponse(INSIGHTS_TEMPLATE.read_text(encoding="utf-8"))
 
 
+def _reporting_timezone(requested: Optional[str], site_id: str) -> str:
+    """Resolve the timezone that day boundaries are measured in.
+
+    The viewer's own zone wins — "today" should mean today where they are — with
+    the site's configured zone as the fallback. An unknown name silently degrades
+    to UTC rather than erroring the whole page.
+    """
+    candidates = [requested, get_config("guardrails", site_id).get("timezone")]
+    for name in candidates:
+        if not name:
+            continue
+        try:
+            ZoneInfo(name)
+            return name
+        except Exception:
+            continue
+    return "UTC"
+
+
+def _empty_day(day: str) -> dict:
+    return {"day": day, "visitors": 0, "new_visitors": 0, "returning_visitors": 0,
+            "multi_session_visitors": 0, "sessions": 0, "pageviews": 0}
+
+
 @router.get("/api/insights")
-async def api_insights(site_id: str = Depends(get_site_id)) -> dict:
+async def api_insights(tz: Optional[str] = None, site_id: str = Depends(get_site_id)) -> dict:
     """Page analytics: totals, per-page views, page-type split, and a daily trend."""
+    zone = _reporting_timezone(tz, site_id)
+
     async with transaction() as cur:
         totals = await repo.insights_totals(cur, site_id)
         pages = await repo.page_views_breakdown(cur, site_id)
         page_types = await repo.page_type_breakdown(cur, site_id)
         by_day_rows = await repo.views_by_day(cur, site_id, INSIGHTS_DAYS)
+        visitor_rows = await repo.visitor_daily_breakdown(cur, site_id, zone, INSIGHTS_DAYS)
 
     # fill missing days so the trend line is continuous
     today = datetime.now(timezone.utc).date()
@@ -110,12 +138,25 @@ async def api_insights(site_id: str = Depends(get_site_id)) -> dict:
         by_day.append({"day": d, "views": (row["views"] if row else 0),
                        "visitors": (row["visitors"] if row else 0)})
 
+    # Today/yesterday in the reporting zone, so a day with no traffic reads as
+    # zero rather than going missing from the response.
+    local_today = datetime.now(ZoneInfo(zone)).date()
+    seen_visitors = {r["day"]: r for r in visitor_rows}
+    today_key = local_today.isoformat()
+    yesterday_key = (local_today - timedelta(days=1)).isoformat()
+
     return {
         "site_id": site_id,
         "totals": totals,
         "pages": pages,
         "page_types": page_types,
         "by_day": by_day,
+        "visitors": {
+            "timezone": zone,
+            "today": seen_visitors.get(today_key) or _empty_day(today_key),
+            "yesterday": seen_visitors.get(yesterday_key) or _empty_day(yesterday_key),
+            "series": visitor_rows,
+        },
     }
 
 

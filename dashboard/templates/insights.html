@@ -85,6 +85,20 @@
     /* table */
     .tw { overflow-x:auto; }
     table { width:100%; border-collapse:collapse; font-size:13px; }
+    .vt td, .vt th { padding:9px 4px; border-bottom:1px solid var(--border-2); }
+    .vt thead th { font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+                   font-weight:600; text-align:right; border-bottom:1px solid var(--border); }
+    .vt thead th:first-child { text-align:left; }
+    .vt tbody tr:last-child td { border-bottom:none; }
+    .vt .vl { font-size:13px; font-weight:550; }
+    .vt .vs { display:block; font-size:11px; color:var(--muted); font-weight:400; margin-top:1px; }
+    .vt .vn { text-align:right; font-variant-numeric:tabular-nums; font-size:15px; font-weight:600; width:96px; }
+    .vt tr.lead .vn { font-size:22px; font-weight:660; letter-spacing:-.02em; }
+    .vt .vd { text-align:right; width:78px; }
+    .dl { font-size:11px; font-weight:640; padding:2px 7px; border-radius:999px; white-space:nowrap; }
+    .dl.up   { color:var(--good-t,#3c7a43); background:color-mix(in srgb,var(--good,#4a8f52) 14%,transparent); }
+    .dl.down { color:#a53d29; background:color-mix(in srgb,var(--crit,#c24a33) 13%,transparent); }
+    .dl.flat { color:var(--muted); background:var(--surface-2); }
     th { text-align:left; padding:11px 16px; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:600; border-bottom:1px solid var(--border); white-space:nowrap; }
     th.r, td.r { text-align:right; font-variant-numeric:tabular-nums; }
     td { padding:11px 16px; border-bottom:1px solid var(--border-2); }
@@ -123,6 +137,12 @@
     <div class="kpis" id="kpis"></div>
 
     <div class="card">
+      <h2><span class="ic" id="ic-people"></span> Visitors · today vs yesterday
+        <span style="margin-left:auto;font-size:11px;color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none" id="vtz"></span></h2>
+      <div class="pad" id="vcompare"></div>
+    </div>
+
+    <div class="card">
       <h2><span class="ic" id="ic-trend"></span> Page views · last 14 days</h2>
       <div class="pad"><div class="chartwrap"><svg class="chart" id="trend" preserveAspectRatio="none"></svg><div class="tt" id="tt"></div></div></div>
     </div>
@@ -155,6 +175,7 @@
     eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
     layers:'<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
     list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    people:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     spark:'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
     globe:'<circle cx="12" cy="12" r="9"/><path d="M2 12h20"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/>',
     sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
@@ -172,6 +193,7 @@
     document.getElementById("ic-in").innerHTML = svg("bars",16);
     document.getElementById("ic-mp").innerHTML = svg("globe",16);
     document.getElementById("ic-se").innerHTML = svg("sliders",16);
+    document.getElementById("ic-people").innerHTML = svg("people",15);
     document.getElementById("ic-trend").innerHTML = svg("trend",15);
     document.getElementById("ic-top").innerHTML = svg("eye",15);
     document.getElementById("ic-type").innerHTML = svg("layers",15);
@@ -189,6 +211,38 @@
     ];
     document.getElementById("kpis").innerHTML = tiles.map(x=>
       `<div class="tile"><div class="k">${x[0]}</div><div class="v">${x[1]}</div><div class="s">${x[2]}</div></div>`).join("");
+  }
+
+  // Today vs yesterday, split by whether each visitor had ever been seen before.
+  // new + returning always sums to visitors; multi-session is a different cut
+  // (came back more than once within the same day), so it is shown apart.
+  function renderVisitors(v){
+    if(!v){ document.getElementById("vcompare").innerHTML = ""; return; }
+    const t=v.today, y=v.yesterday;
+    document.getElementById("vtz").textContent = "days measured in "+v.timezone;
+
+    const delta=(a,b)=>{
+      if(b===0) return a>0 ? `<span class="dl up">new</span>` : `<span class="dl flat">—</span>`;
+      const p=Math.round((a-b)/b*100);
+      if(p===0) return `<span class="dl flat">same</span>`;
+      return `<span class="dl ${p>0?'up':'down'}">${p>0?'▲':'▼'} ${Math.abs(p)}%</span>`;
+    };
+    const rows=[
+      ["Visitors",        t.visitors,               y.visitors,               "distinct people"],
+      ["New",             t.new_visitors,           y.new_visitors,           "first time ever on the site"],
+      ["Returning",       t.returning_visitors,     y.returning_visitors,     "had visited on an earlier day"],
+      ["Came back again", t.multi_session_visitors, y.multi_session_visitors, "more than one session that day"],
+      ["Page views",      t.pageviews,              y.pageviews,              "total views"],
+      ["Sessions",        t.sessions,               y.sessions,               "total sessions"],
+    ];
+    document.getElementById("vcompare").innerHTML =
+      `<table class="vt"><thead><tr><th></th><th>Today</th><th>Yesterday</th><th></th></tr></thead><tbody>`+
+      rows.map((r,i)=>`<tr class="${i===0?'lead':''}">
+        <td class="vl">${esc(r[0])}<span class="vs">${esc(r[3])}</span></td>
+        <td class="vn">${fmt(r[1])}</td>
+        <td class="vn muted">${fmt(r[2])}</td>
+        <td class="vd">${delta(r[1],r[2])}</td></tr>`).join("")+
+      `</tbody></table>`;
   }
 
   function hbars(rows, labelHtml, valueOf, subOf){
@@ -290,8 +344,12 @@
 
   async function load(){
     try{
-      const d = await get("/api/insights");
+      // Ask for day boundaries in the viewer's own zone — otherwise "today"
+      // starts at 05:30 local for anyone in IST reading a UTC-bucketed count.
+      let tz=""; try{ tz=Intl.DateTimeFormat().resolvedOptions().timeZone||""; }catch(e){}
+      const d = await get("/api/insights"+(tz?`?tz=${encodeURIComponent(tz)}`:""));
       renderKpis(d.totals);
+      renderVisitors(d.visitors);
       renderTrend(d.by_day);
       renderTopPages(d.pages);
       renderPageTypes(d.page_types);

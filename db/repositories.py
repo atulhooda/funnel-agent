@@ -433,6 +433,58 @@ async def views_by_day(cur, site_id: str, days: int) -> list[dict]:
     return await cur.fetchall()
 
 
+async def visitor_daily_breakdown(cur, site_id: str, tz: str = "UTC", days: int = 14) -> list[dict]:
+    """Per-day visitor counts split into new vs returning.
+
+    Days are bucketed in `tz`, not UTC: to someone in IST a UTC-bucketed "today"
+    would begin at 05:30 local, so the number on screen would disagree with what
+    they mean by today for the first five and a half hours of every morning.
+
+    A visitor is NEW on the first local day they were ever seen, and RETURNING on
+    any day after that — so the two always sum to the day's visitor count.
+    `multi_session` counts visitors who came back more than once within the same
+    day, which is a different question from returning across days.
+    """
+    await cur.execute(
+        """
+        WITH scoped AS (
+            SELECT anonymous_id,
+                   session_id,
+                   event_type,
+                   (occurred_at AT TIME ZONE %(tz)s)::date AS day
+            FROM events
+            WHERE site_id = %(site)s
+        ),
+        firsts AS (
+            SELECT anonymous_id, min(day) AS first_day FROM scoped GROUP BY 1
+        ),
+        per_visitor_day AS (
+            SELECT s.day,
+                   s.anonymous_id,
+                   count(DISTINCT s.session_id)                          AS sessions,
+                   count(*) FILTER (WHERE s.event_type = 'page_view')    AS pageviews,
+                   (f.first_day = s.day)                                 AS is_new
+            FROM scoped s
+            JOIN firsts f ON f.anonymous_id = s.anonymous_id
+            GROUP BY s.day, s.anonymous_id, f.first_day
+        )
+        SELECT to_char(day, 'YYYY-MM-DD')                AS day,
+               count(*)                                  AS visitors,
+               count(*) FILTER (WHERE is_new)            AS new_visitors,
+               count(*) FILTER (WHERE NOT is_new)        AS returning_visitors,
+               count(*) FILTER (WHERE sessions > 1)      AS multi_session_visitors,
+               COALESCE(sum(sessions), 0)                AS sessions,
+               COALESCE(sum(pageviews), 0)               AS pageviews
+        FROM per_visitor_day
+        WHERE day > ((now() AT TIME ZONE %(tz)s)::date - %(days)s::int)
+        GROUP BY day
+        ORDER BY day
+        """,
+        {"site": site_id, "tz": tz, "days": days},
+    )
+    return await cur.fetchall()
+
+
 async def get_site_config(cur, site_id: str) -> dict:
     """All DB config overrides for a site, as {key: value}."""
     await cur.execute("SELECT key, value FROM site_config WHERE site_id = %s", (site_id,))
