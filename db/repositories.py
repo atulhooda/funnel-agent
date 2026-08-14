@@ -1029,11 +1029,26 @@ async def list_leads(cur, site_id: str) -> list[dict]:
                l.funnel_stage, l.intent_score, l.likely_objections, l.persona_signals,
                l.scored_at, l.scoring_error, l.stage_source, l.stage_reason, l.created_at,
                g.country, g.region, g.city, g.timezone,
+               act.pageviews, act.clicks, act.active_seconds,
                COALESCE(
                  (SELECT max(e.occurred_at) FROM events e WHERE e.site_id = l.site_id AND e.lead_id = l.id),
                  l.created_at
                ) AS last_activity
         FROM leads l
+        -- Enough signal to tell a real visitor from a drive-by: what they
+        -- looked at, whether they acted, and how long they actually stayed.
+        LEFT JOIN LATERAL (
+            SELECT
+              count(*) FILTER (WHERE e.event_type = 'page_view')                       AS pageviews,
+              count(*) FILTER (WHERE e.event_type NOT IN
+                               ('page_view', 'page_engagement', 'heartbeat'))          AS clicks,
+              COALESCE(sum((e.metadata ->> 'active_ms')::numeric)
+                       FILTER (WHERE e.event_type = 'page_engagement'
+                               AND jsonb_typeof(e.metadata -> 'active_ms') = 'number'),
+                       0) / 1000.0                                                     AS active_seconds
+            FROM events e
+            WHERE e.site_id = l.site_id AND e.lead_id = l.id
+        ) act ON true
         LEFT JOIN LATERAL (
             SELECT country, region, city, district, postal, isp,
                    accuracy_m, location_source, timezone

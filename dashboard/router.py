@@ -160,10 +160,52 @@ async def api_insights(tz: Optional[str] = None, site_id: str = Depends(get_site
     }
 
 
+def classify_lead(lead: dict, floor_seconds: float) -> tuple[str, Optional[str]]:
+    """Split leads into 'real' and 'junk', with the reason.
+
+    Junk means there is nothing to work with AND nothing to learn from: the
+    visitor never said who they were, never clicked anything, saw a single page,
+    and did not stay on it long enough to count. Every condition must hold, so
+    the label errs toward keeping a lead.
+
+    Anyone who identified themselves is real regardless of how briefly they
+    browsed — a phone number is the whole point. And a lead with no engagement
+    telemetry but several page views stays real too, because absence of
+    measurement is not evidence of a bounce (leads recorded before dwell
+    tracking existed would otherwise all be condemned).
+    """
+    if lead.get("email") or lead.get("phone"):
+        return "real", None
+    if (lead.get("clicks") or 0) > 0:
+        return "real", None
+    if (lead.get("pageviews") or 0) > 1:
+        return "real", None
+    if float(lead.get("active_seconds") or 0) >= floor_seconds:
+        return "real", None
+    return "junk", "one page, no clicks, under the minimum dwell, never identified"
+
+
 @router.get("/api/leads")
 async def api_leads(site_id: str = Depends(get_site_id)) -> dict:
+    floor = float((get_config("stage_rules", site_id).get("engagement") or {})
+                  .get("min_seconds_per_view", 8))
     async with transaction() as cur:
-        return {"site_id": site_id, "leads": await repo.list_leads(cur, site_id)}
+        leads = await repo.list_leads(cur, site_id)
+
+    counts = {"real": 0, "junk": 0}
+    for lead in leads:
+        quality, reason = classify_lead(lead, floor)
+        lead["quality"] = quality
+        lead["junk_reason"] = reason
+        # Decimal from SQL is not JSON-serializable by default.
+        lead["active_seconds"] = round(float(lead.get("active_seconds") or 0), 1)
+        counts[quality] += 1
+
+    return {
+        "site_id": site_id,
+        "leads": leads,
+        "counts": {**counts, "all": len(leads), "min_seconds_per_view": floor},
+    }
 
 
 @router.get("/api/decisions")

@@ -108,6 +108,19 @@
     .muted { color:var(--muted); }
     .empty { padding:26px 16px; color:var(--muted); text-align:center; }
 
+    /* real / junk / all filter */
+    .lead-tabs { display:inline-flex; gap:3px; background:var(--surface-2); border:1px solid var(--border);
+                 border-radius:9px; padding:3px; margin-left:6px; }
+    .ltab { font:inherit; font-size:11px; font-weight:640; letter-spacing:0; text-transform:none;
+            border:none; background:transparent; color:var(--ink-2); padding:4px 10px; border-radius:6px;
+            cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
+    .ltab:hover:not(.on) { background:var(--hover); }
+    .ltab.on { background:var(--surface); box-shadow:var(--shadow); color:var(--ink); cursor:default; }
+    .ltab .n { font-variant-numeric:tabular-nums; color:var(--muted); font-weight:600; }
+    .ltab.on .n { color:var(--blue-l); }
+    .junk { font-size:10px; font-weight:640; padding:1px 6px; border-radius:999px; vertical-align:middle;
+            color:var(--muted); background:var(--surface-2); border:1px solid var(--border); cursor:help; }
+
     /* pagination */
     .pager { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
              padding:12px 16px; border-top:1px solid var(--border); }
@@ -271,6 +284,7 @@
   <div class="card">
     <h2><span class="ic" id="ic-leads"></span> Leads
       <span class="live-hint">— click a lead to open their full journey</span>
+      <span class="lead-tabs" id="lead-tabs"></span>
       <span class="pill-count" id="leads-n"></span></h2>
     <div class="tw"><table id="leads"><thead><tr>
       <th>Lead</th><th>Stage</th><th>Intent</th><th>Consent</th><th>Objections</th><th>Persona</th><th>Scored</th>
@@ -589,12 +603,31 @@
   // this replaces.
   const LEADS_PER_PAGE = 20;
   let LEAD_PAGE = 1;
+  // Junk = one page, no clicks, under the dwell minimum, never identified.
+  // Hidden by default so the list is people you could actually act on; the
+  // rows are only filtered from view, never deleted.
+  let LEAD_FILTER = "real";
 
   function goToLeadPage(n){
     LEAD_PAGE = n;
     renderLeads(window.__LEADS || []);
     document.getElementById("leads").scrollIntoView({block:"nearest", behavior:"smooth"});
   }
+
+  function setLeadFilter(f){
+    if(LEAD_FILTER === f) return;
+    LEAD_FILTER = f;
+    LEAD_PAGE = 1;                       // a new list needs a new first page
+    renderLeads(window.__LEADS || []);
+  }
+
+  function renderLeadTabs(counts){
+    const tabs = [["real","Real"],["junk","Junk"],["all","All"]];
+    document.getElementById("lead-tabs").innerHTML = tabs.map(([k,label])=>
+      `<button class="ltab${LEAD_FILTER===k?' on':''}" onclick="setLeadFilter('${k}')">${label}
+         <span class="n">${fmtNum(counts[k]||0)}</span></button>`).join("");
+  }
+  const fmtNum = n => new Intl.NumberFormat().format(n||0);
 
   function pagerHtml(total, page, pages){
     if(pages <= 1) return "";
@@ -619,6 +652,12 @@
 
   function renderLeads(rows){
     window.__LEADS = rows;
+    renderLeadTabs(window.__LEAD_COUNTS || {
+      real: rows.filter(l=>l.quality!=="junk").length,
+      junk: rows.filter(l=>l.quality==="junk").length,
+      all:  rows.length,
+    });
+    if(LEAD_FILTER !== "all") rows = rows.filter(l => (l.quality||"real") === LEAD_FILTER);
     document.getElementById("leads-n").textContent = rows.length;
 
     const pages = Math.max(1, Math.ceil(rows.length / LEADS_PER_PAGE));
@@ -643,9 +682,10 @@
       const subEmail = contact.length
         ? `<div class="muted small contact" style="margin-top:2px">${contact.join('<span class="sep">·</span>')}</div>` : "";
       const flag = l.scoring_error ? ` <span class="flag" title="${esc(l.scoring_error)}">⚠ flagged</span>` : "";
+      const junk = l.quality === "junk" ? ` <span class="junk" title="${esc(l.junk_reason||"")}">junk</span>` : "";
       const loc = locHtml(l);
       return `<tr data-lead-id="${l.id}" onclick="openLeadDetail(${l.id})">
-        <td><div class="lead"><span class="caret">${svg('chevron',12)}</span>${av}<div>${who}${flag}${subEmail}${loc?`<div>${loc}</div>`:''}</div></div></td>
+        <td><div class="lead"><span class="caret">${svg('chevron',12)}</span>${av}<div>${who}${flag}${junk}${subEmail}${loc?`<div>${loc}</div>`:''}</div></div></td>
         <td>${stageChip(l.funnel_stage)}</td>
         <td>${meter(l.intent_score)}</td>
         <td><div class="consent">${cp(l.email_opt_in,'email')}${cp(l.whatsapp_opt_in,'wa')}</div></td>
@@ -653,7 +693,10 @@
         <td class="top">${persona(l.persona_signals)}</td>
         <td class="muted num">${ts(l.scored_at)||'—'}</td>
       </tr>`;
-    }).join("") || `<tr><td class="empty" colspan="7">No leads yet — run replay.py → score.py.</td></tr>`;
+    }).join("") || `<tr><td class="empty" colspan="7">${
+        LEAD_FILTER === "junk" ? "No junk leads — every visitor did something worth keeping."
+      : LEAD_FILTER === "real" ? "No real leads yet — only drive-by visits so far. Check the Junk tab."
+      : "No leads yet."}</td></tr>`;
   }
 
   async function refresh(){
@@ -661,6 +704,7 @@
     try{
       const [L,D,S] = await Promise.all([get("/api/leads"),get("/api/decisions"),get("/api/sent-messages")]);
       window.__DEC = D.decisions; window.__SENT = S.sent_messages;   // for the lead drawer
+      window.__LEAD_COUNTS = L.counts;
       renderKpis(L.leads,D.decisions,S.sent_messages);
       renderFunnel(L.leads);
       renderLeads(L.leads);
