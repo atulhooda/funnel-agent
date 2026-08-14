@@ -118,11 +118,15 @@
     .search input { flex:1; min-width:0; border:none; background:transparent; outline:none;
                     font:inherit; font-size:12.5px; color:var(--ink); padding:7px 0; }
     .search input::-webkit-search-cancel-button { cursor:pointer; }
-    .sortbox { display:inline-flex; align-items:center; gap:7px; margin-left:auto; }
-    .sortbox label { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:600; }
-    .sortbox select { font:inherit; font-size:12.5px; font-weight:550; color:var(--ink); cursor:pointer;
+    .fbox { display:inline-flex; align-items:center; gap:6px; }
+    .fbox label { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+    .fbox select, .fbox input[type=date] { font:inherit; font-size:12.5px; font-weight:550; color:var(--ink); cursor:pointer;
                       background:var(--surface-2); border:1px solid var(--border); border-radius:9px; padding:6px 9px; }
-    .sortbox select:focus { outline:none; border-color:var(--blue); }
+    .fbox select:focus, .fbox input[type=date]:focus { outline:none; border-color:var(--blue); }
+    .sortbox { margin-left:auto; }
+    .clearbtn { font:inherit; font-size:11px; line-height:1; width:22px; height:22px; cursor:pointer; color:var(--muted);
+                background:transparent; border:1px solid var(--border); border-radius:6px; }
+    .clearbtn:hover { background:var(--surface-2); color:var(--ink); }
     .dirbtn { font:inherit; font-size:14px; line-height:1; width:30px; height:30px; cursor:pointer;
               background:var(--surface-2); border:1px solid var(--border); border-radius:9px; color:var(--ink-2); }
     .dirbtn:hover { background:#f6efdf; }
@@ -311,16 +315,25 @@
         <input type="search" id="lead-q" placeholder="Search name, email, phone, place…"
                oninput="setLeadQuery(this.value)" autocomplete="off">
       </label>
-      <span class="sortbox">
+      <span class="fbox">
+        <label for="lead-stage">Stage</label>
+        <select id="lead-stage" onchange="setLeadStage(this.value)"></select>
+      </span>
+      <span class="fbox">
+        <label for="lead-date">On</label>
+        <input type="date" id="lead-date" onchange="setLeadDate(this.value)">
+        <button class="clearbtn" id="lead-date-clear" onclick="setLeadDate('')" title="Clear date">✕</button>
+      </span>
+      <span class="fbox sortbox">
         <label for="lead-sort">Sort</label>
         <select id="lead-sort" onchange="setLeadSort(this.value)">
           <option value="activity">Last activity</option>
           <option value="created">First seen</option>
+          <option value="intent">Intent score</option>
+          <option value="time">Time on site</option>
           <option value="name">Name</option>
           <option value="place">Place</option>
           <option value="stage">Funnel stage</option>
-          <option value="intent">Intent score</option>
-          <option value="time">Time on site</option>
         </select>
         <button class="dirbtn" id="lead-dir" onclick="toggleLeadDir()" title="Reverse order"></button>
       </span>
@@ -665,6 +678,26 @@
     LEAD_PAGE = 1;                       // a new list needs a new first page
     renderLeads(window.__LEADS || []);
   }
+  let LEAD_STAGE = "";      // "" = every stage
+  let LEAD_DATE  = "";      // "" = every date; otherwise YYYY-MM-DD
+
+  function setLeadStage(s){ LEAD_STAGE = s; LEAD_PAGE = 1; renderLeads(window.__LEADS || []); }
+  function setLeadDate(d){
+    LEAD_DATE = d || "";
+    document.getElementById("lead-date").value = LEAD_DATE;
+    LEAD_PAGE = 1;
+    renderLeads(window.__LEADS || []);
+  }
+
+  // The calendar day a timestamp falls on IN THE VIEWER'S timezone. Comparing
+  // the raw UTC date would put anything after 18:30 IST on the wrong day.
+  function localDay(iso){
+    const d = parseTs(iso);
+    if(!d) return "";
+    const p = n => String(n).padStart(2,"0");
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  }
+
   function setLeadSort(s){ LEAD_SORT = s; LEAD_PAGE = 1; renderLeads(window.__LEADS || []); }
   function toggleLeadDir(){ LEAD_DIR = LEAD_DIR === "desc" ? "asc" : "desc"; LEAD_PAGE = 1; renderLeads(window.__LEADS || []); }
   function setLeadQuery(q){ LEAD_QUERY = q.trim().toLowerCase(); LEAD_PAGE = 1; renderLeads(window.__LEADS || []); }
@@ -746,6 +779,20 @@
       all:  rows.length,
     });
     if(LEAD_FILTER !== "all") rows = rows.filter(l => (l.quality||"real") === LEAD_FILTER);
+
+    // Stage options carry counts for the set you're actually looking at, so the
+    // dropdown doubles as a breakdown.
+    const stageCounts = rows.reduce((a,l)=>{ const k=l.funnel_stage||"none"; a[k]=(a[k]||0)+1; return a; }, {});
+    document.getElementById("lead-stage").innerHTML =
+      [["","All stages",rows.length],["BOFU","BOFU",stageCounts.BOFU||0],
+       ["MOFU","MOFU",stageCounts.MOFU||0],["TOFU","TOFU",stageCounts.TOFU||0],
+       ["none","Unscored",stageCounts.none||0]]
+      .map(([v,label,n])=>`<option value="${v}"${LEAD_STAGE===v?" selected":""}>${label} (${n})</option>`).join("");
+
+    if(LEAD_STAGE) rows = rows.filter(l => (l.funnel_stage || "none") === LEAD_STAGE);
+    if(LEAD_DATE)  rows = rows.filter(l => localDay(l.last_activity) === LEAD_DATE);
+    document.getElementById("lead-date-clear").style.display = LEAD_DATE ? "" : "none";
+
     rows = sortLeads(rows.filter(matchesQuery));
     document.getElementById("leads-n").textContent = rows.length;
     // Keep the controls showing the state they actually describe.
@@ -788,7 +835,9 @@
         <td class="muted num">${ts(l.scored_at)||'—'}</td>
       </tr>`;
     }).join("") || `<tr><td class="empty" colspan="7">${
-        LEAD_FILTER === "junk" ? "No junk leads — every visitor did something worth keeping."
+        (LEAD_STAGE || LEAD_DATE || LEAD_QUERY)
+          ? `No leads match these filters.${LEAD_DATE ? ` Nobody was active on ${esc(LEAD_DATE)}.` : ""}`
+      : LEAD_FILTER === "junk" ? "No junk leads — every visitor did something worth keeping."
       : LEAD_FILTER === "real" ? "No real leads yet — only drive-by visits so far. Check the Junk tab."
       : "No leads yet."}</td></tr>`;
   }
