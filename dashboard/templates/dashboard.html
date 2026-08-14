@@ -108,9 +108,28 @@
     .muted { color:var(--muted); }
     .empty { padding:26px 16px; color:var(--muted); text-align:center; }
 
+    /* leads toolbar: filter · search · sort */
+    .leads-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+                     padding:11px 16px; border-bottom:1px solid var(--border); background:var(--surface); }
+    .search { display:inline-flex; align-items:center; gap:7px; flex:1; min-width:190px; max-width:340px;
+              background:var(--surface-2); border:1px solid var(--border); border-radius:9px; padding:0 10px; }
+    .search:focus-within { border-color:var(--blue); box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 16%,transparent); }
+    .search .si { color:var(--muted); display:flex; }
+    .search input { flex:1; min-width:0; border:none; background:transparent; outline:none;
+                    font:inherit; font-size:12.5px; color:var(--ink); padding:7px 0; }
+    .search input::-webkit-search-cancel-button { cursor:pointer; }
+    .sortbox { display:inline-flex; align-items:center; gap:7px; margin-left:auto; }
+    .sortbox label { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+    .sortbox select { font:inherit; font-size:12.5px; font-weight:550; color:var(--ink); cursor:pointer;
+                      background:var(--surface-2); border:1px solid var(--border); border-radius:9px; padding:6px 9px; }
+    .sortbox select:focus { outline:none; border-color:var(--blue); }
+    .dirbtn { font:inherit; font-size:14px; line-height:1; width:30px; height:30px; cursor:pointer;
+              background:var(--surface-2); border:1px solid var(--border); border-radius:9px; color:var(--ink-2); }
+    .dirbtn:hover { background:#f6efdf; }
+
     /* real / junk / all filter */
     .lead-tabs { display:inline-flex; gap:3px; background:var(--surface-2); border:1px solid var(--border);
-                 border-radius:9px; padding:3px; margin-left:6px; }
+                 border-radius:9px; padding:3px; }
     .ltab { font:inherit; font-size:11px; font-weight:640; letter-spacing:0; text-transform:none;
             border:none; background:transparent; color:var(--ink-2); padding:4px 10px; border-radius:6px;
             cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
@@ -284,8 +303,28 @@
   <div class="card">
     <h2><span class="ic" id="ic-leads"></span> Leads
       <span class="live-hint">— click a lead to open their full journey</span>
-      <span class="lead-tabs" id="lead-tabs"></span>
       <span class="pill-count" id="leads-n"></span></h2>
+    <div class="leads-toolbar">
+      <span class="lead-tabs" id="lead-tabs"></span>
+      <label class="search">
+        <span class="si" id="ic-search"></span>
+        <input type="search" id="lead-q" placeholder="Search name, email, phone, place…"
+               oninput="setLeadQuery(this.value)" autocomplete="off">
+      </label>
+      <span class="sortbox">
+        <label for="lead-sort">Sort</label>
+        <select id="lead-sort" onchange="setLeadSort(this.value)">
+          <option value="activity">Last activity</option>
+          <option value="created">First seen</option>
+          <option value="name">Name</option>
+          <option value="place">Place</option>
+          <option value="stage">Funnel stage</option>
+          <option value="intent">Intent score</option>
+          <option value="time">Time on site</option>
+        </select>
+        <button class="dirbtn" id="lead-dir" onclick="toggleLeadDir()" title="Reverse order"></button>
+      </span>
+    </div>
     <div class="tw"><table id="leads"><thead><tr>
       <th>Lead</th><th>Stage</th><th>Intent</th><th>Consent</th><th>Objections</th><th>Persona</th><th>Scored</th>
     </tr></thead><tbody></tbody></table></div>
@@ -310,7 +349,8 @@
     chat:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     user:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
-    check:'<path d="M20 6 9 17l-5-5"/>', x:'<path d="M18 6 6 18M6 6l12 12"/>',
+    check:'<path d="M20 6 9 17l-5-5"/>',
+    search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', x:'<path d="M18 6 6 18M6 6l12 12"/>',
     users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/>',
     zap:'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>', send:'<path d="m22 2-7 20-4-9-9-4 20-7z"/>',
     layers:'<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
@@ -354,6 +394,7 @@
     document.getElementById("refic").innerHTML = svg("refresh",15);
     document.getElementById("ic-live").innerHTML = svg("radio",15);
     document.getElementById("ic-funnel").innerHTML = svg("filter",15);
+    document.getElementById("ic-search").innerHTML = svg("search",13);
     document.getElementById("ic-leads").innerHTML = svg("users",15);
   }
 
@@ -614,11 +655,58 @@
     document.getElementById("leads").scrollIntoView({block:"nearest", behavior:"smooth"});
   }
 
+  let LEAD_SORT = "activity";
+  let LEAD_DIR  = "desc";
+  let LEAD_QUERY = "";
+
   function setLeadFilter(f){
     if(LEAD_FILTER === f) return;
     LEAD_FILTER = f;
     LEAD_PAGE = 1;                       // a new list needs a new first page
     renderLeads(window.__LEADS || []);
+  }
+  function setLeadSort(s){ LEAD_SORT = s; LEAD_PAGE = 1; renderLeads(window.__LEADS || []); }
+  function toggleLeadDir(){ LEAD_DIR = LEAD_DIR === "desc" ? "asc" : "desc"; LEAD_PAGE = 1; renderLeads(window.__LEADS || []); }
+  function setLeadQuery(q){ LEAD_QUERY = q.trim().toLowerCase(); LEAD_PAGE = 1; renderLeads(window.__LEADS || []); }
+
+  // What a lead is called, and where they are — used for both sorting and search
+  // so the two always agree with what the row actually displays.
+  const leadName  = l => (l.name || l.email || l.phone || `Anonymous #${l.id}`);
+  const leadPlace = l => [l.city, l.country].filter(Boolean).join(", ");
+  const STAGE_RANK = { TOFU:1, MOFU:2, BOFU:3 };
+
+  function leadSortKey(l){
+    switch(LEAD_SORT){
+      case "name":    return leadName(l).toLowerCase();
+      case "place":   return leadPlace(l).toLowerCase();
+      case "stage":   return STAGE_RANK[l.funnel_stage] || 0;
+      case "intent":  return l.intent_score;
+      case "time":    return l.active_seconds;
+      case "created": return l.created_at ? Date.parse(l.created_at) : null;
+      default:        return l.last_activity ? Date.parse(l.last_activity) : null;
+    }
+  }
+
+  function sortLeads(rows){
+    const dir = LEAD_DIR === "asc" ? 1 : -1;
+    return rows.slice().sort((a,b)=>{
+      const ka = leadSortKey(a), kb = leadSortKey(b);
+      // Blanks sink to the bottom either way — an unscored lead or one with no
+      // location is never the most interesting row, whichever way you sort.
+      const ea = ka === null || ka === undefined || ka === "";
+      const eb = kb === null || kb === undefined || kb === "";
+      if(ea && eb) return a.id - b.id;
+      if(ea) return 1;
+      if(eb) return -1;
+      if(typeof ka === "string") return ka.localeCompare(kb) * dir;
+      return (ka - kb) * dir;
+    });
+  }
+
+  function matchesQuery(l){
+    if(!LEAD_QUERY) return true;
+    return [leadName(l), l.email, l.phone, leadPlace(l), l.funnel_stage]
+      .filter(Boolean).join(" ").toLowerCase().includes(LEAD_QUERY);
   }
 
   function renderLeadTabs(counts){
@@ -658,7 +746,13 @@
       all:  rows.length,
     });
     if(LEAD_FILTER !== "all") rows = rows.filter(l => (l.quality||"real") === LEAD_FILTER);
+    rows = sortLeads(rows.filter(matchesQuery));
     document.getElementById("leads-n").textContent = rows.length;
+    // Keep the controls showing the state they actually describe.
+    document.getElementById("lead-sort").value = LEAD_SORT;
+    document.getElementById("lead-dir").textContent = LEAD_DIR === "desc" ? "↓" : "↑";
+    document.getElementById("lead-dir").title =
+      LEAD_DIR === "desc" ? "Highest / newest / Z–A first" : "Lowest / oldest / A–Z first";
 
     const pages = Math.max(1, Math.ceil(rows.length / LEADS_PER_PAGE));
     // Clamp rather than reset: if leads were removed while you were on the last
