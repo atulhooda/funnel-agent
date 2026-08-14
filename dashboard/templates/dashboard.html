@@ -108,6 +108,22 @@
     .muted { color:var(--muted); }
     .empty { padding:26px 16px; color:var(--muted); text-align:center; }
 
+    /* pagination */
+    .pager { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+             padding:12px 16px; border-top:1px solid var(--border); }
+    .pager:empty { display:none; }
+    .pg-info { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .pg-btns { display:flex; align-items:center; gap:5px; }
+    .pg { font:inherit; font-size:12.5px; font-weight:600; min-width:30px; height:30px; padding:0 9px;
+          border:1px solid var(--border); background:var(--surface); color:var(--ink-2);
+          border-radius:8px; cursor:pointer; font-variant-numeric:tabular-nums; }
+    .pg:hover:not(:disabled):not(.on) { background:var(--surface-2); }
+    .pg.on { background:color-mix(in srgb,var(--blue) 16%,transparent); border-color:color-mix(in srgb,var(--blue) 38%,transparent);
+             color:var(--blue-l); cursor:default; }
+    .pg.nav { font-size:15px; line-height:1; padding:0 10px; }
+    .pg:disabled { opacity:.4; cursor:default; }
+    .pg-gap { color:var(--muted); padding:0 2px; font-size:12px; }
+
     /* lead cell */
     .lead { display:flex; align-items:center; gap:10px; }
     .av { width:28px; height:28px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:650; background:var(--surface-2); border:1px solid var(--border); color:var(--ink-2); }
@@ -259,6 +275,7 @@
     <div class="tw"><table id="leads"><thead><tr>
       <th>Lead</th><th>Stage</th><th>Intent</th><th>Consent</th><th>Objections</th><th>Persona</th><th>Scored</th>
     </tr></thead><tbody></tbody></table></div>
+    <div class="pager" id="leads-pager"></div>
   </div>
 
   <div class="foot">Behavioral events scored & decided by Gemini · guardrails enforced · sends stubbed (shadow mode).</div>
@@ -566,8 +583,52 @@
       `${total} lead${total===1?"":"s"} placed across the funnel${unscored?` · ${unscored} unscored`:""} — width ∝ count.`;
   }
 
+  // ---- leads pagination -------------------------------------------------
+  // The refresh below runs every 20s, so the page you're on has to survive it —
+  // being bounced back to page 1 mid-read would be worse than the long scroll
+  // this replaces.
+  const LEADS_PER_PAGE = 20;
+  let LEAD_PAGE = 1;
+
+  function goToLeadPage(n){
+    LEAD_PAGE = n;
+    renderLeads(window.__LEADS || []);
+    document.getElementById("leads").scrollIntoView({block:"nearest", behavior:"smooth"});
+  }
+
+  function pagerHtml(total, page, pages){
+    if(pages <= 1) return "";
+    const from = (page-1)*LEADS_PER_PAGE + 1, to = Math.min(page*LEADS_PER_PAGE, total);
+    // Window the numbers so 40 pages don't render 40 buttons: first, last,
+    // and the current page's neighbours, with gaps elided.
+    const want = new Set([1, pages, page, page-1, page+1]);
+    const nums = [...want].filter(n=>n>=1&&n<=pages).sort((a,b)=>a-b);
+    let btns = "", prev = 0;
+    for(const n of nums){
+      if(prev && n - prev > 1) btns += `<span class="pg-gap">…</span>`;
+      btns += `<button class="pg${n===page?' on':''}" onclick="goToLeadPage(${n})">${n}</button>`;
+      prev = n;
+    }
+    return `<span class="pg-info">Showing ${from}–${to} of ${total}</span>
+      <span class="pg-btns">
+        <button class="pg nav" onclick="goToLeadPage(${page-1})" ${page<=1?'disabled':''} aria-label="Previous">‹</button>
+        ${btns}
+        <button class="pg nav" onclick="goToLeadPage(${page+1})" ${page>=pages?'disabled':''} aria-label="Next">›</button>
+      </span>`;
+  }
+
   function renderLeads(rows){
+    window.__LEADS = rows;
     document.getElementById("leads-n").textContent = rows.length;
+
+    const pages = Math.max(1, Math.ceil(rows.length / LEADS_PER_PAGE));
+    // Clamp rather than reset: if leads were removed while you were on the last
+    // page, land on the new last page instead of jumping to the top.
+    LEAD_PAGE = Math.min(Math.max(1, LEAD_PAGE), pages);
+    const start = (LEAD_PAGE - 1) * LEADS_PER_PAGE;
+    document.getElementById("leads-pager").innerHTML = pagerHtml(rows.length, LEAD_PAGE, pages);
+
+    rows = rows.slice(start, start + LEADS_PER_PAGE);
     body("leads").innerHTML = rows.map(l=>{
       const label = l.name || l.email;
       const named = !!label;
