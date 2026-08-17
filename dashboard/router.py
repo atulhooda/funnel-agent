@@ -185,6 +185,35 @@ def classify_lead(lead: dict, floor_seconds: float) -> tuple[str, Optional[str]]
     return "junk", "one page, no clicks, under the minimum dwell, never identified"
 
 
+@router.get("/api/diagnostics/server-key")
+async def api_server_key_fingerprint() -> dict:
+    """Enough to compare SERVER_KEY across two hosts, without revealing it.
+
+    When a shared secret silently fails to match there is nothing to look at:
+    both sides hold a value neither can print. Length and a truncated SHA-256
+    settle it — identical strings give identical fingerprints, and a stray
+    newline from a copy-paste shows up as a length that is one too long.
+
+    Eight hex characters of a hash cannot be reversed into a 32-byte random
+    key, and this route is admin-gated like the rest of the dashboard.
+    """
+    import hashlib
+
+    key = get_settings().server_key
+    stripped = key.strip()
+    return {
+        "configured": bool(key),
+        "length": len(key),
+        # The usual culprit: a trailing newline or space picked up on paste.
+        "has_surrounding_whitespace": key != stripped,
+        "fingerprint": hashlib.sha256(key.encode()).hexdigest()[:8] if key else None,
+        "fingerprint_if_trimmed": (
+            hashlib.sha256(stripped.encode()).hexdigest()[:8] if key != stripped else None
+        ),
+        "compare_with": "printf '%s' \"$YOUR_KEY\" | shasum -a 256 | cut -c1-8",
+    }
+
+
 @router.get("/api/leads")
 async def api_leads(site_id: str = Depends(get_site_id)) -> dict:
     floor = float((get_config("stage_rules", site_id).get("engagement") or {})
