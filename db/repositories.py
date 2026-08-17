@@ -264,43 +264,76 @@ async def update_lead_consent(
     lead_id: int,
     email: Optional[str],
     phone: Optional[str],
-    email_opt_in: bool,
-    whatsapp_opt_in: bool,
+    email_opt_in: Optional[bool],
+    whatsapp_opt_in: Optional[bool],
     consent_timestamp: datetime,
     consent_source: Optional[str],
     name: Optional[str] = None,
     phone_verified: bool = False,
 ) -> dict:
-    """Refresh consent (latest wins), fill in email/phone if missing, update name.
+    """Refresh a lead from a new submission. The latest details win.
 
-    A verified phone OVERWRITES whatever was stored: the usual COALESCE keeps the
-    first value seen, which would leave a typo from a form in place of the number
-    the person just proved they own. Verification itself only ever moves false ->
-    true; a later unverified identify must not silently downgrade it.
+    People mistype their own number, notice at the code screen, and submit
+    again. That correction has to stick, so a newly supplied phone or email
+    REPLACES the stored one rather than losing to a COALESCE that keeps
+    whatever arrived first.
+
+    Two guards on that:
+      * A number that has been proven by OTP is never overwritten by an
+        unverified submission — only by another verified one. Verification
+        itself only moves false -> true.
+      * A value already held by a DIFFERENT lead is left alone. Both columns
+        are uniquely indexed, so taking it would abort the transaction, and
+        silently merging two people would be worse than ignoring the edit.
+
+    Omitted fields change nothing: absent consent means "not stated here", not
+    "revoked", and an absent phone must not wipe the one on file.
     """
     await cur.execute(
         """
         UPDATE leads
-        SET name              = COALESCE(%s, name),
-            email             = COALESCE(email, %s),
-            -- casts are required: a bare parameter inside IS NOT NULL gives
-            -- Postgres nothing to infer a type from
-            phone             = CASE WHEN %s::boolean AND %s::text IS NOT NULL
-                                     THEN %s::text ELSE COALESCE(phone, %s::text) END,
-            email_opt_in      = COALESCE(%s::boolean, email_opt_in),
-            whatsapp_opt_in   = COALESCE(%s::boolean, whatsapp_opt_in),
-            consent_timestamp = %s,
-            consent_source    = %s,
-            phone_verified    = leads.phone_verified OR %s,
-            phone_verified_at = CASE WHEN %s AND leads.phone_verified_at IS NULL
-                                     THEN now() ELSE leads.phone_verified_at END
-        WHERE id = %s
+        SET name              = COALESCE(%(name)s, leads.name),
+            email             = CASE
+                                  WHEN %(email)s::text IS NOT NULL
+                                       AND NOT EXISTS (
+                                         SELECT 1 FROM leads o
+                                         WHERE o.site_id = leads.site_id
+                                           AND o.id <> leads.id
+                                           AND lower(o.email) = lower(%(email)s::text))
+                                  THEN %(email)s::text
+                                  ELSE COALESCE(leads.email, %(email)s::text)
+                                END,
+            phone             = CASE
+                                  WHEN %(phone)s::text IS NOT NULL
+                                       AND (%(verified)s::boolean OR NOT leads.phone_verified)
+                                       AND NOT EXISTS (
+                                         SELECT 1 FROM leads o
+                                         WHERE o.site_id = leads.site_id
+                                           AND o.id <> leads.id
+                                           AND regexp_replace(o.phone, '\D', '', 'g')
+                                               = regexp_replace(%(phone)s::text, '\D', '', 'g'))
+                                  THEN %(phone)s::text
+                                  ELSE COALESCE(leads.phone, %(phone)s::text)
+                                END,
+            email_opt_in      = COALESCE(%(email_opt_in)s::boolean, leads.email_opt_in),
+            whatsapp_opt_in   = COALESCE(%(wa_opt_in)s::boolean, leads.whatsapp_opt_in),
+            consent_timestamp = %(consent_ts)s,
+            consent_source    = %(consent_source)s,
+            phone_verified    = leads.phone_verified OR %(verified)s::boolean,
+            phone_verified_at = CASE
+                                  WHEN %(verified)s::boolean AND leads.phone_verified_at IS NULL
+                                  THEN now() ELSE leads.phone_verified_at
+                                END
+        WHERE leads.id = %(lead_id)s
         RETURNING *
         """,
-        (name, email,
-         phone_verified, phone, phone, phone,
-         email_opt_in, whatsapp_opt_in, consent_timestamp, consent_source,
-         phone_verified, phone_verified, lead_id),
+        {
+            "name": name, "email": email, "phone": phone,
+            "verified": phone_verified,
+            "email_opt_in": email_opt_in, "wa_opt_in": whatsapp_opt_in,
+            "consent_ts": consent_timestamp, "consent_source": consent_source,
+            "lead_id": lead_id,
+        },
     )
     return await cur.fetchone()
 
