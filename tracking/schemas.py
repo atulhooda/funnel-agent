@@ -40,7 +40,11 @@ class LocateResponse(BaseModel):
 
 
 class IdentifyRequest(BaseModel):
-    anonymous_id: str
+    # Optional: it links the person to what they browsed beforehand, but a lead
+    # who verified their phone must be recorded whether or not that link exists.
+    # A blocked tracker or a fresh private window means no cookie, and losing the
+    # contact details in that case is far worse than losing the history.
+    anonymous_id: Optional[str] = None
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -68,6 +72,6 @@ class IdentifyResponse(BaseModel):
     site_id: str
     lead_id: int
     created: bool                                 # True if a new lead was created
-    anonymous_id: str
+    anonymous_id: Optional[str] = None            # absent when no tracking cookie was present
     backfilled_events: int                        # prior events re-pointed to the lead
     phone_verified: bool = False                  # whether the lead now holds a verified number

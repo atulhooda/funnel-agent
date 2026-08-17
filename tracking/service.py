@@ -213,7 +213,7 @@ async def track_event(
 async def identify(
     *,
     site_id: str,
-    anonymous_id: str,
+    anonymous_id: Optional[str],
     email: Optional[str],
     phone: Optional[str],
     email_opt_in: Optional[bool],
@@ -223,7 +223,7 @@ async def identify(
     name: Optional[str] = None,
     phone_verified: bool = False,
 ) -> dict:
-    """Resolve the anonymous_id to a lead, refresh consent, backfill events.
+    """Resolve a person to a lead, refresh consent, backfill their events.
 
     Resolution precedence keeps one lead per person while honoring an anonymous
     profile that scoring may already have created for this visitor:
@@ -231,12 +231,21 @@ async def identify(
       2. Else the anonymous_id's current profile lead (if any) is enriched.
       3. Else a new lead is created.
     A stale anonymous profile displaced by case 1 is deleted if unused. Atomic.
+
+    anonymous_id is OPTIONAL. It is what ties the person to the browsing they did
+    before identifying themselves, but it comes from a cookie — blocked trackers,
+    private windows and second devices all arrive without one. The lead is still
+    recorded in that case; only the history linkage is skipped, because contact
+    details for someone who just proved their phone number are worth far more
+    than the pages they happened to read.
     """
     consent_ts = _ensure_utc(consent_timestamp)
 
     async with transaction() as cur:
-        identity = await repo.get_or_create_identity(cur, site_id, anonymous_id)
-        current_lead_id = identity.get("lead_id")
+        current_lead_id = None
+        if anonymous_id:
+            identity = await repo.get_or_create_identity(cur, site_id, anonymous_id)
+            current_lead_id = identity.get("lead_id")
 
         match = None
         if email:
@@ -292,8 +301,10 @@ async def identify(
                 phone_verified=phone_verified,
             )
 
-        await repo.link_identity(cur, site_id, anonymous_id, lead["id"])
-        backfilled = await repo.backfill_events_to_lead(cur, site_id, anonymous_id, lead["id"])
+        backfilled = 0
+        if anonymous_id:
+            await repo.link_identity(cur, site_id, anonymous_id, lead["id"])
+            backfilled = await repo.backfill_events_to_lead(cur, site_id, anonymous_id, lead["id"])
 
     return {
         "lead_id": lead["id"],
