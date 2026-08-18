@@ -561,8 +561,8 @@
   // ---- journey sessions ----------------------------------------------------
   // A visitor's history is a sequence of visits, not one long scroll. Each
   // session becomes its own page so a lead with weeks of activity stays
-  // readable, and the numbers run oldest-to-newest so "1" is always their
-  // first visit.
+  // readable, and the numbers run newest-to-oldest so "1" is always their most
+  // recent visit.
   let JOURNEY_LEAD = null;
   let SESSION_PAGE = 1;
 
@@ -595,9 +595,9 @@
       prev = n;
     }
     return `<span class="pg-btns">
-      <button class="pg nav" onclick="goToSession(${page - 1})" ${page <= 1 ? 'disabled' : ''} aria-label="Previous visit">‹</button>
+      <button class="pg nav" onclick="goToSession(${page - 1})" ${page <= 1 ? 'disabled' : ''} aria-label="More recent visit">‹</button>
       ${btns}
-      <button class="pg nav" onclick="goToSession(${page + 1})" ${page >= pages ? 'disabled' : ''} aria-label="Next visit">›</button>
+      <button class="pg nav" onclick="goToSession(${page + 1})" ${page >= pages ? 'disabled' : ''} aria-label="Older visit">›</button>
     </span>`;
   }
 
@@ -614,9 +614,11 @@
     // Opening a different lead starts on their most recent visit — that is the
     // one you almost always want — while the numbering stays chronological.
     window.__JOURNEY = d;
-    const sessions = groupSessions(d.timeline);
+    // Newest visit first: "1" is what they just did, which is what you open the
+    // drawer to see. Events inside a visit stay in the order they happened.
+    const sessions = groupSessions(d.timeline).reverse();
     const pages = Math.max(1, sessions.length);
-    if (JOURNEY_LEAD !== d.lead_id) { JOURNEY_LEAD = d.lead_id; SESSION_PAGE = pages; }
+    if (JOURNEY_LEAD !== d.lead_id) { JOURNEY_LEAD = d.lead_id; SESSION_PAGE = 1; }
     SESSION_PAGE = Math.min(Math.max(1, SESSION_PAGE), pages);
     const current = sessions[SESSION_PAGE - 1];
     const shown = current ? current.events : [];
