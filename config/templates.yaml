@@ -32,3 +32,34 @@ whatsapp:
   BOFU: |
     Hi! You were mid-signup earlier — anything I can help with to get you across
     the line? Happy to walk you through it.
+
+# --- WhatsApp templates (Meta-approved names) --------------------------------
+# A business-initiated WhatsApp message MUST use a template Meta has approved;
+# free text only delivers inside the 24-hour window that opens when the CONTACT
+# messages you. So every message the agent starts — the welcome and each stage
+# nudge — names a template here.
+#
+# `name` and `lang` must match the approved template exactly. `params` lists the
+# lead fields that fill {{1}}, {{2}}, … in the template body, in order. Change
+# these without a deploy from the Settings page or by editing this file.
+#
+# Category matters to Meta: a welcome tied to something the person just did is
+# UTILITY, while a nudge that promotes the product is MARKETING — which requires
+# opt-in and counts toward per-user marketing limits.
+whatsapp_templates:
+  welcome:
+    name: engageo_welcome
+    lang: en
+    params: [name]
+  TOFU:
+    name: engageo_nudge_tofu
+    lang: en
+    params: [name]
+  MOFU:
+    name: engageo_nudge_mofu
+    lang: en
+    params: [name]
+  BOFU:
+    name: engageo_nudge_bofu
+    lang: en
+    params: [name]

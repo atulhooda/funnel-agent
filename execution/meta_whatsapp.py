@@ -23,6 +23,7 @@ template_body_param=false, and send to a number on your test allow-list.
 from __future__ import annotations
 
 import re
+from typing import Optional
 
 import httpx
 
@@ -38,10 +39,27 @@ class MetaWhatsAppSender(Sender):
         # transport is injectable so the request logic can be tested without network.
         self._transport = transport
 
-    def _payload(self, to: str, message: str, s, use_template: bool) -> dict:
+    def _payload(self, to: str, message: str, s, use_template: bool,
+                 spec: Optional[dict] = None) -> dict:
+        """Build the Graph payload.
+
+        `spec` is a per-message template chosen by the caller (welcome, or the
+        lead's funnel stage). It wins over the single globally-configured
+        template, which stays as the fallback so an unconfigured stage still
+        sends something rather than nothing.
+        """
         if use_template:
-            template: dict = {"name": s.meta_wa_template_name, "language": {"code": s.meta_wa_template_lang}}
-            if s.meta_wa_template_body_param:
+            name = (spec or {}).get("name") or s.meta_wa_template_name
+            lang = (spec or {}).get("lang") or s.meta_wa_template_lang
+            template: dict = {"name": name, "language": {"code": lang}}
+            params = (spec or {}).get("values")
+            if params:
+                # Positional {{1}}, {{2}}, … in the approved body.
+                template["components"] = [
+                    {"type": "body",
+                     "parameters": [{"type": "text", "text": str(v)} for v in params]}
+                ]
+            elif spec is None and s.meta_wa_template_body_param:
                 template["components"] = [
                     {"type": "body", "parameters": [{"type": "text", "text": message}]}
                 ]
@@ -71,13 +89,14 @@ class MetaWhatsAppSender(Sender):
         # type=template with META_WA_TEMPLATE_NAME unset (the default) would post
         # {"name": ""} to Graph and fail every send — including first contact with
         # someone who has no conversation history, which is every cold lead.
-        use_template = s.meta_wa_message_type == "template"
+        spec = metadata.get("template")          # per-message, chosen by the caller
+        use_template = s.meta_wa_message_type == "template" or bool(spec)
         if not use_template and not metadata.get("window_open", True) and s.meta_wa_template_name:
             use_template = True
 
         url = f"https://graph.facebook.com/{s.meta_wa_api_version}/{s.meta_wa_phone_number_id}/messages"
         headers = {"Authorization": f"Bearer {s.meta_wa_access_token}", "Content-Type": "application/json"}
-        payload = self._payload(to_digits, message, s, use_template)
+        payload = self._payload(to_digits, message, s, use_template, spec)
 
         try:
             async with httpx.AsyncClient(timeout=15.0, transport=self._transport) as client:
