@@ -242,6 +242,12 @@
            border-radius:9px; padding:8px 11px; margin-bottom:14px; line-height:1.45; }
     .jwhy b{ font-weight:640; }
     .sess-sep{ font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:10px 0 4px 72px; }
+    .sesshead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 10px;
+                padding:9px 11px; background:var(--surface-2); border:1px solid var(--border-2); border-radius:10px; }
+    .sess-n { font-size:12px; font-weight:660; letter-spacing:-.01em; }
+    .sess-meta { font-size:11.5px; color:var(--muted); }
+    .sesshead .pg-btns { margin-left:auto; }
+    .sesshead .pg { min-width:26px; height:26px; font-size:11.5px; padding:0 7px; }
     .tzhint{ font-size:10.5px; letter-spacing:.04em; color:var(--muted); margin:0 0 8px 4px; }
 
     /* lead detail slide-over */
@@ -482,6 +488,7 @@
     if(m<60) return m+'m'+(r?' '+r+'s':'');
     const h=Math.floor(m/60); return h+'h'+((m%60)?' '+(m%60)+'m':'');
   };
+  const dayOnly = s => { const d=parseTs(s); return d ? d.toLocaleDateString([], {month:'short', day:'numeric'}) : ''; };
   const clock = s => { const d=parseTs(s); return d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''; };
   let drawerLeadId = null;
   const $drawer  = () => document.getElementById('drawer');
@@ -494,6 +501,7 @@
     document.querySelectorAll('#leads tbody tr.open').forEach(r=>r.classList.remove('open'));
   }
   async function openLeadDetail(id){
+    if (drawerLeadId !== id) JOURNEY_LEAD = null;   // start on their latest visit
     drawerLeadId = id;
     document.querySelectorAll('#leads tbody tr.open').forEach(r=>r.classList.remove('open'));
     const tr = document.querySelector('#leads tbody tr[data-lead-id="'+id+'"]'); if(tr) tr.classList.add('open');
@@ -550,6 +558,49 @@
       `<span class="muted num" style="margin-left:auto">${ts(m.created_at)}</span></div>`+
       bodyHtml + (m.to_address?`<div class="muted small" style="margin-top:6px">to ${esc(m.to_address)}</div>`:'')+`</div>`;
   }
+  // ---- journey sessions ----------------------------------------------------
+  // A visitor's history is a sequence of visits, not one long scroll. Each
+  // session becomes its own page so a lead with weeks of activity stays
+  // readable, and the numbers run oldest-to-newest so "1" is always their
+  // first visit.
+  let JOURNEY_LEAD = null;
+  let SESSION_PAGE = 1;
+
+  function groupSessions(timeline){
+    const out = [];
+    let cur = null;
+    (timeline || []).forEach(e => {
+      const id = e.session_id || null;
+      if (!cur || id !== cur.id) { cur = { id, events: [] }; out.push(cur); }
+      cur.events.push(e);
+    });
+    return out;
+  }
+
+  function goToSession(n){
+    SESSION_PAGE = n;
+    if (window.__JOURNEY) renderJourney(document.getElementById('dj'), window.__JOURNEY);
+  }
+
+  function sessionPager(page, pages){
+    if (pages <= 1) return '';
+    // Same windowing as the leads pager: first, last and the current page's
+    // neighbours, gaps elided, so forty visits don't render forty buttons.
+    const want = new Set([1, pages, page, page - 1, page + 1]);
+    const nums = [...want].filter(n => n >= 1 && n <= pages).sort((a, b) => a - b);
+    let btns = '', prev = 0;
+    for (const n of nums){
+      if (prev && n - prev > 1) btns += `<span class="pg-gap">…</span>`;
+      btns += `<button class="pg${n === page ? ' on' : ''}" onclick="goToSession(${n})">${n}</button>`;
+      prev = n;
+    }
+    return `<span class="pg-btns">
+      <button class="pg nav" onclick="goToSession(${page - 1})" ${page <= 1 ? 'disabled' : ''} aria-label="Previous visit">‹</button>
+      ${btns}
+      <button class="pg nav" onclick="goToSession(${page + 1})" ${page >= pages ? 'disabled' : ''} aria-label="Next visit">›</button>
+    </span>`;
+  }
+
   function renderJourney(box, d){
     const s=d.summary;
     const M=[['Total time',fmtDur(s.total_time_seconds)],['Active time',fmtDur(s.active_time_seconds)],
@@ -560,9 +611,18 @@
     // Why this stage: the rule that fired, or the model + any gate that moved it.
     const why = s.stage_source
       ? `<div class="jwhy"><b>${esc(s.stage_source)}</b>${s.stage_reason?` — ${esc(s.stage_reason)}`:''}</div>` : '';
-    let lastSess=null, items='';
-    (d.timeline||[]).forEach(e=>{
-      if(e.session_id && e.session_id!==lastSess){ lastSess=e.session_id; if(items) items+=`<div class="sess-sep">— new session —</div>`; }
+    // Opening a different lead starts on their most recent visit — that is the
+    // one you almost always want — while the numbering stays chronological.
+    window.__JOURNEY = d;
+    const sessions = groupSessions(d.timeline);
+    const pages = Math.max(1, sessions.length);
+    if (JOURNEY_LEAD !== d.lead_id) { JOURNEY_LEAD = d.lead_id; SESSION_PAGE = pages; }
+    SESSION_PAGE = Math.min(Math.max(1, SESSION_PAGE), pages);
+    const current = sessions[SESSION_PAGE - 1];
+    const shown = current ? current.events : [];
+
+    let items='';
+    shown.forEach(e=>{
       const isClick=e.event_type!=='page_view';
       const clk=e.metadata||{};
       let head, sub='';
@@ -591,8 +651,18 @@
     });
     // Name the timezone explicitly — a bare "17:06" is unreadable if you can't
     // tell whose clock it is.
-    const tz = TZ_NAME ? `<div class="tzhint">times in ${esc(TZ_NAME)}</div>` : '';
-    box.innerHTML=`<div class="jmetrics">${metrics}</div>${why}${tz}<ul class="timeline">${items||'<li class="muted">No events recorded yet.</li>'}</ul>`;
+    const tz = TZ_NAME ? `times in ${esc(TZ_NAME)}` : '';
+    const first = shown[0], last = shown[shown.length-1];
+    const span = first ? (shown.length > 1 && clock(last.occurred_at) !== clock(first.occurred_at)
+                            ? `${clock(first.occurred_at)} – ${clock(last.occurred_at)}`
+                            : clock(first.occurred_at)) : '';
+    const sessHead = sessions.length ? `<div class="sesshead">
+        <span class="sess-n">Visit ${SESSION_PAGE} of ${pages}</span>
+        <span class="sess-meta">${esc(dayOnly(first ? first.occurred_at : null))}${span?` · ${esc(span)}`:''} · ${shown.length} event${shown.length===1?'':'s'}</span>
+        ${sessionPager(SESSION_PAGE, pages)}
+      </div>` : '';
+    const tzline = tz ? `<div class="tzhint">${tz}</div>` : '';
+    box.innerHTML=`<div class="jmetrics">${metrics}</div>${why}${sessHead}${tzline}<ul class="timeline">${items||'<li class="muted">No events recorded yet.</li>'}</ul>`;
   }
 
   function stageChip(s){ return s ? `<span class="chip ${STAGE[s]||'flat'}">${esc(s)}</span>` : '<span class="muted">unscored</span>'; }
