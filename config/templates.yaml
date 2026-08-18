@@ -56,7 +56,9 @@ whatsapp_templates:
     lang: en
     params: [name]
   MOFU:
-    name: engageo_nudge_mofu
+    # Named without the 'nudge_' the others use — matches what is approved in
+    # WhatsApp Manager, which is the name Graph checks.
+    name: engageo_mofu
     lang: en
     params: [name]
   BOFU:
