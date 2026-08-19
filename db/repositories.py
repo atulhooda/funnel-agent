@@ -346,6 +346,31 @@ async def update_lead_consent(
     return await cur.fetchone()
 
 
+async def claim_welcome(cur, site_id: str, lead_id: int) -> bool:
+    """Reserve the right to send this lead's welcome. True if we got it.
+
+    The WHERE clause is the lock: only one caller can move welcomed_at off NULL,
+    so two registrations racing through identify cannot both send.
+    """
+    await cur.execute(
+        """
+        UPDATE leads SET welcomed_at = now()
+        WHERE site_id = %s AND id = %s AND welcomed_at IS NULL
+        RETURNING id
+        """,
+        (site_id, lead_id),
+    )
+    return (await cur.fetchone()) is not None
+
+
+async def release_welcome(cur, site_id: str, lead_id: int) -> None:
+    """Give the claim back after a failed send, so it can be retried."""
+    await cur.execute(
+        "UPDATE leads SET welcomed_at = NULL WHERE site_id = %s AND id = %s",
+        (site_id, lead_id),
+    )
+
+
 async def get_lead_by_id(cur, site_id: str, lead_id: int) -> Optional[dict]:
     await cur.execute("SELECT * FROM leads WHERE site_id = %s AND id = %s", (site_id, lead_id))
     return await cur.fetchone()

@@ -312,6 +312,12 @@ async def identify(
             await repo.link_identity(cur, site_id, anonymous_id, lead["id"])
             backfilled = await repo.backfill_events_to_lead(cur, site_id, anonymous_id, lead["id"])
 
+    # Welcome them straight away rather than waiting for the scheduler's next
+    # pass — a thank-you that lands two minutes later reads like a mailshot.
+    # Backgrounded and self-contained: it re-reads the lead, decides for itself
+    # whether to send, and can never fail this request.
+    asyncio.create_task(_welcome(site_id, lead["id"]))
+
     return {
         "lead_id": lead["id"],
         "created": created,
@@ -319,3 +325,11 @@ async def identify(
         "backfilled_events": backfilled,
         "phone_verified": bool(lead.get("phone_verified")),
     }
+
+
+async def _welcome(site_id: str, lead_id: int) -> None:
+    # Imported here: execution imports messaging, which would otherwise make a
+    # cycle out of a module Layer 1 loads at startup.
+    from execution.welcome import send_welcome
+
+    await send_welcome(site_id, lead_id)

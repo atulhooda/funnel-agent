@@ -88,6 +88,11 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS stage_reason TEXT;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone_verified    BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
 
+-- When the welcome message was sent. Its only job is idempotency: identify runs
+-- again on every correction and re-verification, and nobody should be welcomed
+-- twice because they fixed a typo in their number.
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS welcomed_at TIMESTAMPTZ;
+
 -- ---------------------------------------------------------------------------
 -- Identities: maps an anonymous_id (browser/device) to a lead once known.
 --   A lead may accumulate several anonymous_ids over time (multi-device).
