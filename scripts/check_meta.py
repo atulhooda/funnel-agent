@@ -90,53 +90,67 @@ def main() -> int:
 
     # Scopes say what KINDS of thing the token may touch; asset assignment says
     # WHICH accounts. Both are required, and only the second is easy to forget.
+    #
+    # Informational, never fatal: /me/businesses comes back empty for a System
+    # User token even when the assets ARE assigned. Whether the phone number
+    # below resolves is the real test — this only helps explain a failure there.
     print("== assets the System User can reach ==")
     businesses = graph("me/businesses", token).get("data", [])
     if businesses:
         for b in businesses:
             ok(f"business {b['id']} {b.get('name', '')}")
     else:
-        bad("no business assets assigned to this System User")
+        print("       (empty — normal for a System User token, not a problem in")
+        print("       itself. If the phone number below fails, assign the WABA:")
         print("       Business Settings -> Users -> System users -> Add assets ->")
-        print("       WhatsApp accounts -> pick the WABA -> Full control, then")
-        print("       GENERATE A NEW TOKEN (existing ones don't pick up new grants).")
-        failed = True
+        print("       WhatsApp accounts -> Full control, then generate a NEW token.)")
 
     print("== phone number ==")
-    waba = ""
     if not phone_id:
         warn("META_WA_PHONE_NUMBER_ID is not set")
     else:
+        # No whatsapp_business_account field exists on a phone number, so the
+        # WABA cannot be derived from it — pass META_WA_WABA_ID to list templates.
         info = graph(phone_id, token,
                      fields="display_phone_number,verified_name,quality_rating,"
-                            "whatsapp_business_account{id,name}")
+                            "platform_type,webhook_configuration")
         if "error" in info:
             bad(info["error"]["message"][:130])
             print("       Either the id is wrong (WhatsApp Manager -> API Setup shows")
-            print("       it under the number) or the WABA is not assigned above.")
+            print("       it under the number) or the WABA is not assigned to the")
+            print("       System User — the two failures read identically here.")
             failed = True
         else:
             ok(f"{info.get('display_phone_number')} \"{info.get('verified_name')}\" "
-               f"quality={info.get('quality_rating')}")
-            account = info.get("whatsapp_business_account") or {}
-            waba = account.get("id", "")
-            name = account.get("name", "")
-            ok(f"belongs to WABA {waba} \"{name}\"")
-            # Meta auto-creates a sandbox WABA whose number only reaches a
-            # handful of allow-listed testers. Sending real leads from it looks
-            # like success — Graph accepts the call — and delivers to nobody.
-            if "test" in name.lower():
-                bad("that is the TEST account: it only delivers to allow-listed "
-                    "numbers. Use the production WABA's phone number id.")
+               f"quality={info.get('quality_rating')} {info.get('platform_type')}")
+
+            # A phone number may carry its own webhook override, and Meta allows
+            # exactly one. Pointing it here silently takes inbound messages away
+            # from whatever owns it now, which is how you break a live OTP flow
+            # while believing you only added a feature.
+            hook = (info.get("webhook_configuration") or {}).get("application", "")
+            if not hook:
+                warn("no webhook set on this number — inbound messages, and so"
+                     " every STOP reply, go nowhere")
+            elif "/webhooks/whatsapp" in hook:
+                ok(f"webhook points here: {hook}")
+            else:
+                warn(f"webhook already points elsewhere: {hook}")
+                print("       Something else owns inbound messages for this number.")
+                print("       Repointing it will take them away from that service —")
+                print("       check what breaks before you change it.")
 
     print("== templates ==")
+    waba = os.environ.get("META_WA_WABA_ID", "")
     if not waba:
-        warn("cannot list templates until the phone number resolves")
+        warn("set META_WA_WABA_ID (WhatsApp Manager -> Account tools -> the id"
+             " beside the account) to check template names")
     else:
         result = graph(f"{waba}/message_templates", token,
                        fields="name,status,category,language", limit=50)
         if "error" in result:
             bad(result["error"]["message"][:130])
+            failed = True
         else:
             for tpl in result.get("data", []):
                 line = f"{tpl['name']:28} {tpl['category']:14} {tpl['status']}"
