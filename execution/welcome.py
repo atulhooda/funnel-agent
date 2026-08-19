@@ -5,12 +5,19 @@ the person just did, so it fires straight from identify rather than waiting for
 the scheduler's next pass. Everything else the agent sends goes through the
 decision engine.
 
-Three refusals, in order:
-  * no marketing consent -> nothing (the template is Marketing category, and
-    Meta only permits those to contacts who opted in);
+Refusals, in order:
+  * asked us to stop     -> nothing, whatever the template says;
   * already welcomed     -> nothing (identify re-runs on every correction and
     re-verification; nobody gets welcomed twice for fixing a typo);
-  * no approved template -> nothing (free text cannot open a conversation).
+  * no approved template -> nothing (free text cannot open a conversation);
+  * a MARKETING template with no opt-in -> nothing.
+
+That last one follows the template's declared category rather than always
+demanding the marketing tick. A utility welcome answers something the person
+just did, and the number they handed over for that purpose is the consent;
+requiring a marketing opt-in as well would withhold it from everyone it is
+meant for. Declare the category honestly in config — claiming utility for a
+promotional template sends marketing to people who never agreed to it.
 
 The send-window guardrail is intentionally not applied. That window exists to
 stop cold outreach landing at 3am; this is a reply to something the person did
@@ -38,16 +45,18 @@ async def send_welcome(site_id: str, lead_id: int) -> dict:
 
         if lead is None:
             return {"sent": False, "reason": "lead not found"}
-        if not lead.get("whatsapp_opt_in"):
-            return {"sent": False, "reason": "no whatsapp consent"}
         if not lead.get("phone"):
             return {"sent": False, "reason": "no phone"}
+        if lead.get("whatsapp_opted_out_at"):
+            return {"sent": False, "reason": "opted out"}
         if lead.get("welcomed_at"):
             return {"sent": False, "reason": "already welcomed"}
 
         spec = templates.resolve("welcome", lead, site_id)
         if not spec:
             return {"sent": False, "reason": "no welcome template configured"}
+        if spec["category"] == "marketing" and not lead.get("whatsapp_opt_in"):
+            return {"sent": False, "reason": "no whatsapp consent"}
 
         # Claim the welcome BEFORE sending. Two registrations racing through
         # identify would otherwise both pass the check above and send twice;

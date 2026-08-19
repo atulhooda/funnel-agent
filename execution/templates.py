@@ -38,6 +38,10 @@ def resolve(kind: str, lead: dict, site_id: str = "default") -> Optional[dict]:
     return {
         "name": spec["name"],
         "lang": spec.get("lang") or "en",
+        # Marketing may only reach an opted-in contact; utility may not need to.
+        # Default to marketing: an unlabelled template is treated as the more
+        # restricted kind, so a config typo cannot widen who gets messaged.
+        "category": str(spec.get("category") or "marketing").lower(),
         "values": values,
         # What the contact will actually read, variables filled. Display only —
         # Meta sends its own approved copy either way.

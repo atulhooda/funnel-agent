@@ -43,9 +43,14 @@ whatsapp:
 # lead fields that fill {{1}}, {{2}}, … in the template body, in order. Change
 # these without a deploy from the Settings page or by editing this file.
 #
-# Category matters to Meta: a welcome tied to something the person just did is
-# UTILITY, while a nudge that promotes the product is MARKETING — which requires
-# opt-in and counts toward per-user marketing limits.
+# `category` must match the category Meta approved the template under, because
+# it decides who may receive it. MARKETING may only go to someone who ticked the
+# opt-in box. UTILITY answers a thing the person just did, so handing over their
+# number for that purpose is the consent — requiring a marketing tick as well
+# would block the message from the very people it exists to reach.
+#
+# Getting this wrong is a policy breach, not a bug: declaring a marketing
+# template as utility here would send promotions to people who never opted in.
 whatsapp_templates:
   # `body` is what the contact actually receives. Meta sends the copy IT has
   # approved regardless of what is written here, so this field changes nothing
@@ -54,6 +59,7 @@ whatsapp_templates:
   # Keep it identical to the body in WhatsApp Manager; {{1}} is filled from
   # `params` below, in order.
   welcome:
+    category: utility
     name: engageo_welcome
     lang: en
     params: [name]
@@ -61,6 +67,7 @@ whatsapp_templates:
       Hi {{1}}, thanks for choosing Engageo! We help clinics stop losing patients
       to missed calls and slow replies. We'll be in touch shortly.
   TOFU:
+    category: marketing
     name: engageo_nudge_tofu
     lang: en
     params: [name]
@@ -79,6 +86,7 @@ whatsapp_templates:
       numbers and show what missed calls are actually costing you a month?
       Takes 2 minutes.
   BOFU:
+    category: marketing
     name: engageo_nudge_bofu
     lang: en
     params: [name]
