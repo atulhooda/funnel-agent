@@ -210,7 +210,8 @@ def classify_lead(lead: dict, floor_seconds: float) -> tuple[str, Optional[str]]
         return "real", None
     if float(lead.get("active_seconds") or 0) >= floor_seconds:
         return "real", None
-    return "junk", "one page, no clicks, under the minimum dwell, never identified"
+    return "junk", (f"one page, no clicks, under {floor_seconds:g}s of attention, "
+                    "never identified")
 
 
 @router.get("/api/diagnostics/server-key")
@@ -244,8 +245,11 @@ async def api_server_key_fingerprint() -> dict:
 
 @router.get("/api/leads")
 async def api_leads(site_id: str = Depends(get_site_id)) -> dict:
-    floor = float((get_config("stage_rules", site_id).get("engagement") or {})
-                  .get("min_seconds_per_view", 8))
+    cfg = get_config("stage_rules", site_id)
+    # The bar for "worth pursuing", not the one for "this page view counted".
+    floor = float((cfg.get("junk") or {}).get(
+        "min_active_seconds",
+        (cfg.get("engagement") or {}).get("min_seconds_per_view", 8)))
     async with transaction() as cur:
         leads = await repo.list_leads(cur, site_id)
 

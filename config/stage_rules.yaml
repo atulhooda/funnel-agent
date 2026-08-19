@@ -25,6 +25,16 @@ enabled: true
 # llm_only    — ignore these rules entirely (old behavior).
 mode: rules_first
 
+junk:
+  # How much ACTIVE time a visitor who never identified themselves, never
+  # clicked, and saw a single page must clear before they count as a real lead.
+  #
+  # Deliberately higher than engagement.min_seconds_per_view: that floor only
+  # decides whether a page view is counted at all, which is a far lower bar than
+  # "worth pursuing". Someone who lands from an ad, skims for fifteen seconds
+  # and leaves without touching anything is not a lead.
+  min_active_seconds: 30
+
 engagement:
   # Global floor: a page view with less active time than this is a bounce and is
   # excluded from every count below. Per-page-type overrides live in page_types.yaml.
