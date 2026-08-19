@@ -20,6 +20,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from config.loader import get_config
 from db import repositories as repo
 from db.connection import transaction
 
@@ -99,6 +100,20 @@ async def conversation_for_lead(site_id: str, lead_id: int, channel: str, contac
 # --------------------------------------------------------------------------- #
 # inbound
 # --------------------------------------------------------------------------- #
+
+def is_opt_out(body: Optional[str], site_id: str = "default") -> bool:
+    """Is this inbound message a request to stop being messaged?
+
+    Matched as the WHOLE message, not a substring: our own copy talks about
+    clinics that "stop losing patients", and a reply quoting it must not silence
+    the lead. Trailing punctuation and case are ignored, so "STOP." counts.
+    """
+    if not body:
+        return False
+    text = " ".join(body.strip().lower().split()).strip(".!,;: ")
+    keywords = get_config("guardrails", site_id).get("opt_out_keywords") or []
+    return text in {str(k).strip().lower() for k in keywords}
+
 
 async def record_inbound(
     site_id: str,
@@ -185,8 +200,17 @@ async def record_inbound(
             direction="in", at=at, window_hours=WINDOW_HOURS, unread=True,
         )
 
+        # An opt-out is honoured on the way IN, before anything else can be
+        # queued for them. Recorded inside the same transaction as the message
+        # so we can never store the "STOP" and miss acting on it.
+        opted_out = channel == WHATSAPP and lead_id and is_opt_out(body, site_id)
+        if opted_out:
+            await repo.record_whatsapp_opt_out(cur, site_id, lead_id)
+            print(f"[MESSAGING] lead {lead_id} opted out of whatsapp")
+
     return {
         "duplicate": False,
+        "opted_out": bool(opted_out),
         "conversation_id": conversation["id"],
         "message_id": message["id"],
         "lead_id": lead_id,

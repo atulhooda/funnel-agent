@@ -20,6 +20,9 @@ from messaging import service as messaging
 
 # channel -> the leads column holding that channel's address
 CHANNEL_CONTACT = {"email": "email", "whatsapp": "phone"}
+# channel -> the column set when a contact asked to be left alone. Email has no
+# equivalent yet; unsubscribes there still run through email_opt_in.
+CHANNEL_OPT_OUT = {"whatsapp": "whatsapp_opted_out_at"}
 
 
 def _iso(dt: Optional[datetime]) -> Optional[str]:
@@ -67,7 +70,11 @@ async def execute_decision(site_id: str, decision_id: int) -> Optional[dict]:
 
     # --- consent re-check at SEND time (defense in depth beyond the guardrail) ---
     skip_reason: Optional[str] = None
-    if not (consent_field and lead and lead.get(consent_field)):
+    opt_out_field = CHANNEL_OPT_OUT.get(channel)
+    if opt_out_field and lead and lead.get(opt_out_field):
+        # Checked before consent: an explicit "stop" outranks any opt-in on file.
+        skip_reason = "opted_out"
+    elif not (consent_field and lead and lead.get(consent_field)):
         skip_reason = f"consent_not_granted:{consent_field}"
     elif not to_address:
         skip_reason = "no_contact_address"

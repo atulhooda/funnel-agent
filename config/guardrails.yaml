@@ -32,6 +32,13 @@ action_channels:
   send_email: email
   send_whatsapp: whatsapp
 
+# An inbound message that is EXACTLY one of these — case, spacing and trailing
+# punctuation ignored — is treated as an opt-out and silences the channel.
+# Matched whole, never as a substring: "stop losing patients to missed calls"
+# is a sentence about the product, not a request to be left alone.
+opt_out_keywords:
+  [stop, stop all, stopall, unsubscribe, opt out, opt-out, remove me, cancel, end, quit]
+
 # Consent flag (a leads column) required for each channel.
 channel_consent:
   email: email_opt_in

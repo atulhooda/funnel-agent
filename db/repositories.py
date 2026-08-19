@@ -971,6 +971,23 @@ async def count_recent_outreach(cur, site_id: str, lead_id: int, actions: list[s
     return row["n"]
 
 
+async def record_whatsapp_opt_out(cur, site_id: str, lead_id: int) -> None:
+    """Silence WhatsApp for a lead who asked to be left alone.
+
+    Clears the marketing opt-in as well, so the decision guardrails stop
+    proposing nudges rather than proposing them and having the send refused.
+    """
+    await cur.execute(
+        """
+        UPDATE leads
+        SET whatsapp_opted_out_at = COALESCE(whatsapp_opted_out_at, now()),
+            whatsapp_opt_in = FALSE
+        WHERE site_id = %s AND id = %s
+        """,
+        (site_id, lead_id),
+    )
+
+
 async def stages_already_nudged(cur, site_id: str, lead_id: int) -> set[str]:
     """`channel:stage` pairs this lead has already been messaged at.
 

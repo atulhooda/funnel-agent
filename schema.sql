@@ -372,3 +372,9 @@ DROP TRIGGER IF EXISTS conversations_set_updated_at ON conversations;
 CREATE TRIGGER conversations_set_updated_at
     BEFORE UPDATE ON conversations
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Someone who replies STOP must stop hearing from us, full stop. Deliberately
+-- NOT the same thing as whatsapp_opt_in going false: opt_in only governs
+-- MARKETING, and a utility template needs no marketing tick — so clearing
+-- opt_in alone would not silence one.
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS whatsapp_opted_out_at TIMESTAMPTZ;
