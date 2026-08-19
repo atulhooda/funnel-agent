@@ -37,6 +37,7 @@ async def track(body: TrackRequest, request: Request, site_id: str = Depends(get
         metadata=body.metadata,
         client_ip=client_ip,
         client_tz=client_tz,
+        user_agent=request.headers.get("user-agent"),
     )
     return TrackResponse(
         site_id=site_id,

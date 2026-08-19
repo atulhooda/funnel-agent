@@ -160,6 +160,29 @@ async def api_insights(tz: Optional[str] = None, site_id: str = Depends(get_site
     }
 
 
+# Crawlers that render pages: they run our JavaScript, so they accumulate dwell
+# time and fire clicks exactly like a person. Only the user agent gives them away.
+_BOT_UA = (
+    "bot", "crawler", "spider", "scraper", "preview", "facebookexternalhit",
+    "meta-externalagent", "facebookcatalog", "whatsapp", "bingpreview",
+    "headlesschrome", "python-requests", "curl/", "wget", "axios", "lighthouse",
+    "pingdom", "uptime", "monitor", "gtmetrix", "semrush", "ahrefs",
+)
+# Nobody clicks this many different links inside one second.
+_BOT_CLICK_BURST = 3
+
+
+def looks_automated(lead: dict) -> Optional[str]:
+    """Why this lead looks like software rather than a person, or None."""
+    ua = (lead.get("user_agent") or "").lower()
+    for needle in _BOT_UA:
+        if needle in ua:
+            return f"automated client ({needle})"
+    if (lead.get("max_clicks_per_second") or 0) >= _BOT_CLICK_BURST:
+        return f"{lead['max_clicks_per_second']} clicks in one second"
+    return None
+
+
 def classify_lead(lead: dict, floor_seconds: float) -> tuple[str, Optional[str]]:
     """Split leads into 'real' and 'junk', with the reason.
 
@@ -174,6 +197,11 @@ def classify_lead(lead: dict, floor_seconds: float) -> tuple[str, Optional[str]]
     measurement is not evidence of a bounce (leads recorded before dwell
     tracking existed would otherwise all be condemned).
     """
+    # Checked before anything else: a crawler that trips a form would otherwise
+    # be promoted to a real lead by the contact details it submitted.
+    automated = looks_automated(lead)
+    if automated:
+        return "junk", automated
     if lead.get("email") or lead.get("phone"):
         return "real", None
     if (lead.get("clicks") or 0) > 0:

@@ -148,6 +148,7 @@ async def track_event(
     metadata: Optional[dict[str, Any]],
     client_ip: Optional[str] = None,
     client_tz: Optional[str] = None,
+    user_agent: Optional[str] = None,
 ) -> dict:
     """Ingest one event. If the anonymous_id is already identified, the event is
     attributed to that lead immediately (live attribution after identify)."""
@@ -164,6 +165,11 @@ async def track_event(
         # Browser timezone is an instant, no-lookup geo hint — set it once.
         if client_tz and not identity.get("timezone"):
             await repo.set_identity_timezone(cur, site_id, anonymous_id, client_tz)
+
+        # Crawlers identify themselves here; nothing else distinguishes one that
+        # renders the page from a real visitor.
+        if user_agent:
+            await repo.set_identity_user_agent(cur, site_id, anonymous_id, user_agent)
 
         # Every ping refreshes "live now" presence (server time, so clock skew
         # on the client can't push a visitor out of the live window).

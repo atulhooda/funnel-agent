@@ -94,6 +94,14 @@ async def set_identity_precise_location(
     )
 
 
+async def set_identity_user_agent(cur, site_id: str, anonymous_id: str, ua: str) -> None:
+    """Record the visitor's user agent once (first one wins)."""
+    await cur.execute(
+        "UPDATE identities SET user_agent = COALESCE(user_agent, %s) WHERE site_id = %s AND anonymous_id = %s",
+        (ua[:400], site_id, anonymous_id),
+    )
+
+
 async def set_identity_timezone(cur, site_id: str, anonymous_id: str, timezone: str) -> None:
     await cur.execute(
         "UPDATE identities SET timezone = COALESCE(timezone, %s) WHERE site_id = %s AND anonymous_id = %s",
@@ -1063,6 +1071,7 @@ async def list_leads(cur, site_id: str) -> list[dict]:
                l.scored_at, l.scoring_error, l.stage_source, l.stage_reason, l.created_at,
                g.country, g.region, g.city, g.timezone,
                act.pageviews, act.clicks, act.active_seconds,
+               burst.max_clicks_per_second, ua.user_agent,
                COALESCE(
                  (SELECT max(e.occurred_at) FROM events e WHERE e.site_id = l.site_id AND e.lead_id = l.id),
                  l.created_at
@@ -1082,6 +1091,27 @@ async def list_leads(cur, site_id: str) -> list[dict]:
             FROM events e
             WHERE e.site_id = l.site_id AND e.lead_id = l.id
         ) act ON true
+        -- Most clicks this lead ever fired inside a single second. A person
+        -- cannot click five different links at once; a crawler following every
+        -- link on the page does exactly that.
+        LEFT JOIN LATERAL (
+            SELECT COALESCE(max(n), 0) AS max_clicks_per_second
+            FROM (
+                SELECT count(*) AS n
+                FROM events e2
+                WHERE e2.site_id = l.site_id AND e2.lead_id = l.id
+                  AND e2.event_type NOT IN ('page_view', 'page_engagement', 'heartbeat')
+                GROUP BY date_trunc('second', e2.occurred_at)
+            ) bursts
+        ) burst ON true
+        -- Separate from the geo lateral on purpose: that one only matches
+        -- identities that resolved a location, and a crawler with no geo would
+        -- otherwise arrive with no user agent — exactly the row we need it for.
+        LEFT JOIN LATERAL (
+            SELECT user_agent FROM identities i2
+            WHERE i2.site_id = l.site_id AND i2.lead_id = l.id AND i2.user_agent IS NOT NULL
+            ORDER BY i2.id DESC LIMIT 1
+        ) ua ON true
         LEFT JOIN LATERAL (
             SELECT country, region, city, district, postal, isp,
                    accuracy_m, location_source, timezone

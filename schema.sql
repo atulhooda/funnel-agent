@@ -130,6 +130,12 @@ ALTER TABLE identities ADD COLUMN IF NOT EXISTS isp             TEXT;
 ALTER TABLE identities ADD COLUMN IF NOT EXISTS accuracy_m      INTEGER;   -- GPS only
 ALTER TABLE identities ADD COLUMN IF NOT EXISTS location_source TEXT;      -- 'ip' | 'gps'
 ALTER TABLE identities ADD COLUMN IF NOT EXISTS located_at      TIMESTAMPTZ;
+
+-- The browser's own description of itself, taken from the request header once
+-- per visitor. Crawlers announce themselves here, and it is the only reliable
+-- way to tell Meta's link crawler from a person: it runs JavaScript, so it
+-- accumulates dwell time and fires clicks exactly like a real visit.
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS user_agent TEXT;
 CREATE INDEX IF NOT EXISTS identities_site_lead_idx ON identities (site_id, lead_id);
 
 -- ---------------------------------------------------------------------------
