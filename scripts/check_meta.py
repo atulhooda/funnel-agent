@@ -108,7 +108,8 @@ def main() -> int:
         warn("META_WA_PHONE_NUMBER_ID is not set")
     else:
         info = graph(phone_id, token,
-                     fields="display_phone_number,verified_name,quality_rating,whatsapp_business_account")
+                     fields="display_phone_number,verified_name,quality_rating,"
+                            "whatsapp_business_account{id,name}")
         if "error" in info:
             bad(info["error"]["message"][:130])
             print("       Either the id is wrong (WhatsApp Manager -> API Setup shows")
@@ -117,7 +118,16 @@ def main() -> int:
         else:
             ok(f"{info.get('display_phone_number')} \"{info.get('verified_name')}\" "
                f"quality={info.get('quality_rating')}")
-            waba = (info.get("whatsapp_business_account") or {}).get("id", "")
+            account = info.get("whatsapp_business_account") or {}
+            waba = account.get("id", "")
+            name = account.get("name", "")
+            ok(f"belongs to WABA {waba} \"{name}\"")
+            # Meta auto-creates a sandbox WABA whose number only reaches a
+            # handful of allow-listed testers. Sending real leads from it looks
+            # like success — Graph accepts the call — and delivers to nobody.
+            if "test" in name.lower():
+                bad("that is the TEST account: it only delivers to allow-listed "
+                    "numbers. Use the production WABA's phone number id.")
 
     print("== templates ==")
     if not waba:
