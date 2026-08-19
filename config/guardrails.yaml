@@ -16,6 +16,12 @@ rate_limit:
   max_outreach: 2
   window_days: 7
 
+# One approved template per funnel stage means a second message at the SAME
+# stage delivers copy the lead has already read. With this on, a lead is nudged
+# once per stage and earns a new nudge only by moving (TOFU -> MOFU -> BOFU).
+# The rate limit above is a weekly ceiling; this is the "don't repeat yourself".
+one_nudge_per_stage: true
+
 # Sends may only be scheduled within [start_hour, end_hour) local time.
 send_window:
   start_hour: 9

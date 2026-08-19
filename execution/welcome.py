@@ -62,7 +62,7 @@ async def send_welcome(site_id: str, lead_id: int) -> dict:
         if sender is None:
             return {"sent": False, "reason": "no whatsapp sender"}
 
-        body = f"welcome template: {spec['name']}"
+        body = spec.get("body") or f"welcome template: {spec['name']}"
         queued = await messaging.record_outbound(
             site_id, channel=CHANNEL, contact=lead["phone"], body=body,
             lead_id=lead_id, status="queued", sender_type=sender.sender_type,

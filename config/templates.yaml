@@ -47,21 +47,41 @@ whatsapp:
 # UTILITY, while a nudge that promotes the product is MARKETING — which requires
 # opt-in and counts toward per-user marketing limits.
 whatsapp_templates:
+  # `body` is what the contact actually receives. Meta sends the copy IT has
+  # approved regardless of what is written here, so this field changes nothing
+  # about delivery — it exists so the dashboard, the message thread and the
+  # audit log show the real message rather than free text that was never sent.
+  # Keep it identical to the body in WhatsApp Manager; {{1}} is filled from
+  # `params` below, in order.
   welcome:
     name: engageo_welcome
     lang: en
     params: [name]
+    body: >
+      Hi {{1}}, thanks for choosing Engageo! We help clinics stop losing patients
+      to missed calls and slow replies. We'll be in touch shortly.
   TOFU:
     name: engageo_nudge_tofu
     lang: en
     params: [name]
+    body: >
+      Hi {{1}}! Thanks for stopping by Engageo. Most clinics we speak to are
+      losing 3-4 patients a week to calls nobody picked up. Want the short guide
+      on where those go?
   MOFU:
     # Named without the 'nudge_' the others use — matches what is approved in
     # WhatsApp Manager, which is the name Graph checks.
     name: engageo_mofu
     lang: en
     params: [name]
+    body: >
+      Hi {{1}}! Saw you were weighing this up. Want me to run your clinic's
+      numbers and show what missed calls are actually costing you a month?
+      Takes 2 minutes.
   BOFU:
     name: engageo_nudge_bofu
     lang: en
     params: [name]
+    body: >
+      Hi {{1}}! You were mid-signup earlier — anything I can help with to get
+      you across the line? Happy to walk you through it.

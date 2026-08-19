@@ -35,7 +35,21 @@ def resolve(kind: str, lead: dict, site_id: str = "default") -> Optional[dict]:
             value = "there"
         values.append(str(value) if value not in (None, "") else "there")
 
-    return {"name": spec["name"], "lang": spec.get("lang") or "en", "values": values}
+    return {
+        "name": spec["name"],
+        "lang": spec.get("lang") or "en",
+        "values": values,
+        # What the contact will actually read, variables filled. Display only —
+        # Meta sends its own approved copy either way.
+        "body": _render(spec.get("body") or "", values),
+    }
+
+
+def _render(body: str, values: list[str]) -> str:
+    """Fill {{1}}, {{2}}, … the way Meta fills the approved body."""
+    for i, value in enumerate(values, start=1):
+        body = body.replace("{{%d}}" % i, value)
+    return body.strip()
 
 
 def for_stage(lead: dict, site_id: str = "default") -> Optional[dict]:

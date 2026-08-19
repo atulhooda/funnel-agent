@@ -14,6 +14,7 @@ from config.loader import effective_execution_mode, get_config
 from config.settings import get_settings
 from db import repositories as repo
 from db.connection import transaction
+from execution import templates
 from execution.stubs import get_sender
 from messaging import service as messaging
 
@@ -52,6 +53,17 @@ async def execute_decision(site_id: str, decision_id: int) -> Optional[dict]:
     to_address = lead.get(contact_field) if (lead and contact_field) else None
     mode = effective_execution_mode()
     sender = get_sender(channel, mode)
+    stage = (lead or {}).get("funnel_stage")
+
+    # The stage picks the template, not the model's prose: Meta only delivers an
+    # approved template to a contact who hasn't written in, so a MOFU lead gets
+    # the MOFU template whatever the engine wrote. The engine's message still
+    # matters — it is the reasoning trail, and it is what sends inside the 24h
+    # window where free text is allowed.
+    spec = templates.for_stage(lead, site_id) if (channel == "whatsapp" and lead) else None
+    # Record the copy that is actually delivered. Storing the model's text next
+    # to a template send would put a message in the thread that Meta never sent.
+    body = spec["body"] if (spec and spec.get("body")) else decision["message"]
 
     # --- consent re-check at SEND time (defense in depth beyond the guardrail) ---
     skip_reason: Optional[str] = None
@@ -100,7 +112,7 @@ async def execute_decision(site_id: str, decision_id: int) -> Optional[dict]:
             site_id,
             channel=channel,
             contact=to_address,
-            body=decision["message"],
+            body=body,
             lead_id=decision["lead_id"],
             status="queued",
             sender_type=sender.sender_type,
@@ -109,9 +121,11 @@ async def execute_decision(site_id: str, decision_id: int) -> Optional[dict]:
     except Exception as exc:  # noqa: BLE001 — never block an outreach send
         print(f"[EXECUTION] decision {decision_id}: thread bookkeeping failed, sending anyway: {exc!r}")
 
-    result = await sender.send(to_address, decision["message"], metadata={
+    result = await sender.send(to_address, body, metadata={
         "decision_id": decision_id,
         "conversation_id": (conversation or {}).get("id"),
+        "template": spec,
+        "stage": stage,
         # No thread means no window evidence; assume open so the configured
         # message type decides, exactly as it did before conversations existed.
         "window_open": messaging.window_open(conversation) if conversation else True,
@@ -128,9 +142,12 @@ async def execute_decision(site_id: str, decision_id: int) -> Optional[dict]:
             channel=channel,
             sender_type=sender.sender_type,
             to_address=to_address,
-            message=decision["message"],
+            message=body,
             metadata={
                 "decision_send_at": _iso(decision["send_at"]),
+                # `stage` is what the one-nudge-per-stage guardrail reads back.
+                "stage": stage,
+                "template": (spec or {}).get("name"),
                 "detail": result.detail,
                 "provider_message_id": result.provider_message_id,
                 "mode": mode,

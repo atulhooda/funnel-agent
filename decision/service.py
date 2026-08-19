@@ -39,6 +39,7 @@ async def decide_for_lead(site_id: str, lead_id: int) -> Optional[DecisionOutcom
         if lead is None:
             return None
         recent_outreach = await repo.count_recent_outreach(cur, site_id, lead_id, outreach_actions, since)
+        nudged_stages = await repo.stages_already_nudged(cur, site_id, lead_id)
 
     features = await compute_features(site_id, lead_id)
     proposed, engine_error, raw = await engine.decide(
@@ -52,7 +53,7 @@ async def decide_for_lead(site_id: str, lead_id: int) -> Optional[DecisionOutcom
         )
         raw = None
 
-    result = guardrails.validate(proposed, lead, recent_outreach, now, gcfg)
+    result = guardrails.validate(proposed, lead, recent_outreach, now, gcfg, nudged_stages)
     status = "accepted" if result.passed else "rejected"
 
     async with transaction() as cur:

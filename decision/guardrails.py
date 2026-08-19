@@ -6,6 +6,7 @@ All thresholds come from config/guardrails.yaml (nothing hardcoded). Checks:
   * consent: email_opt_in / whatsapp_opt_in must be true for the channel
   * rate limit: <= max_outreach accepted outreach actions per rolling window
   * send window: a send's send_at falls within [start_hour, end_hour) local time
+  * one nudge per stage: don't repeat a stage's message the lead already got
 Returns a GuardrailResult(passed, violations) that is stored on the decision row.
 """
 from __future__ import annotations
@@ -26,7 +27,8 @@ def _within_send_window(send_at: datetime, cfg: dict) -> bool:
     return int(window.get("start_hour", 0)) <= local.hour < int(window.get("end_hour", 24))
 
 
-def validate(decision: Decision, lead: dict, recent_outreach: int, now: datetime, cfg: dict) -> GuardrailResult:
+def validate(decision: Decision, lead: dict, recent_outreach: int, now: datetime, cfg: dict,
+             nudged_stages: set[str] | None = None) -> GuardrailResult:
     violations: list[str] = []
 
     allowed = cfg.get("allowed_actions", [])
@@ -59,5 +61,13 @@ def validate(decision: Decision, lead: dict, recent_outreach: int, now: datetime
 
         if decision.send_at is not None and not _within_send_window(decision.send_at, cfg):
             violations.append("outside_send_window")
+
+        # One nudge per stage. Each stage has ONE approved template, so a second
+        # decision at the same stage delivers a message the lead has already
+        # read. Moving TOFU -> MOFU earns a new one; sitting still does not.
+        stage = lead.get("funnel_stage")
+        if cfg.get("one_nudge_per_stage", True) and stage and nudged_stages:
+            if f"{decision.channel}:{stage}" in nudged_stages:
+                violations.append(f"stage_already_nudged:{stage}")
 
     return GuardrailResult(passed=not violations, violations=violations)

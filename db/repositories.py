@@ -971,6 +971,26 @@ async def count_recent_outreach(cur, site_id: str, lead_id: int, actions: list[s
     return row["n"]
 
 
+async def stages_already_nudged(cur, site_id: str, lead_id: int) -> set[str]:
+    """`channel:stage` pairs this lead has already been messaged at.
+
+    Feeds the one-nudge-per-stage guardrail. A lead parked at MOFU is rescored
+    on every visit, so without this the same template goes out again and again
+    until the rate limit happens to catch it — and the rate limit is a weekly
+    ceiling, not a "you already said this" check.
+    """
+    await cur.execute(
+        """
+        SELECT DISTINCT channel || ':' || (metadata->>'stage') AS pair
+        FROM sent_messages
+        WHERE site_id = %s AND lead_id = %s AND status = 'sent'
+          AND metadata->>'stage' IS NOT NULL
+        """,
+        (site_id, lead_id),
+    )
+    return {row["pair"] for row in await cur.fetchall()}
+
+
 async def insert_decision(
     cur,
     *,
