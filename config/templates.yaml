@@ -52,44 +52,47 @@ whatsapp:
 # Getting this wrong is a policy breach, not a bug: declaring a marketing
 # template as utility here would send promotions to people who never opted in.
 whatsapp_templates:
-  # `body` is what the contact actually receives. Meta sends the copy IT has
-  # approved regardless of what is written here, so this field changes nothing
-  # about delivery — it exists so the dashboard, the message thread and the
-  # audit log show the real message rather than free text that was never sent.
-  # Keep it identical to the body in WhatsApp Manager; {{1}} is filled from
-  # `params` below, in order.
+  # Pulled verbatim from WhatsApp Manager — `body` is what the contact actually
+  # receives. Meta sends the copy IT approved regardless of what is written
+  # here, so this changes nothing about delivery; it exists so the dashboard,
+  # the thread and the audit log show the real message instead of free text
+  # that was never sent. Re-read it with scripts/check_meta.py after any edit
+  # in WhatsApp Manager.
+  #
+  # `category` MUST match the category Meta approved, because it decides who may
+  # receive the template: marketing only reaches someone who ticked the opt-in
+  # box, utility does not need one. Claiming utility for a marketing template
+  # sends promotions to people who never agreed — a policy breach, not a bug.
   welcome:
     category: utility
-    name: engageo_welcome
+    name: engageo_welcomes_you
     lang: en
     params: [name]
     body: >
-      Hi {{1}}, thanks for choosing Engageo! We help clinics stop losing patients
-      to missed calls and slow replies. We'll be in touch shortly.
+      Hi {{1}}, your enquiry with Engageo is registered. Our team will get
+      back to you shortly, reply here if you need anything in the meantime.
   TOFU:
     category: marketing
     name: engageo_nudge_tofu
     lang: en
     params: [name]
     body: >
-      Hi {{1}}! Thanks for stopping by Engageo. Most clinics we speak to are
-      losing 3-4 patients a week to calls nobody picked up. Want the short guide
-      on where those go?
+      Hi {{1}}, saw you were reading about missed-call recovery. Want a
+      2-minute example of how it works for a clinic your size?
   MOFU:
-    # Named without the 'nudge_' the others use — matches what is approved in
-    # WhatsApp Manager, which is the name Graph checks.
+    category: marketing
     name: engageo_mofu
     lang: en
     params: [name]
     body: >
-      Hi {{1}}! Saw you were weighing this up. Want me to run your clinic's
+      Hi {{1}}, saw you were weighing this up. Want me to run your clinic's
       numbers and show what missed calls are actually costing you a month?
-      Takes 2 minutes.
+      Takes 2 minutes
   BOFU:
     category: marketing
     name: engageo_nudge_bofu
     lang: en
     params: [name]
     body: >
-      Hi {{1}}! You were mid-signup earlier — anything I can help with to get
-      you across the line? Happy to walk you through it.
+      Hi {{1}}, you were looking at pricing. Anything I can clear up to help
+      you decide? Happy to walk you through it.
