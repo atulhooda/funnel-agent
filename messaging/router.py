@@ -46,6 +46,15 @@ async def verify_webhook(request: Request) -> Response:
 _forward_tasks: set = set()
 
 
+# Stamped on anything we relay, and refused on anything that arrives wearing it.
+# Two services that each forward to the other would otherwise bounce a single
+# message between them forever — and the service on the other end of ours
+# answers every inbound with a generated reply, so the loop would not just burn
+# requests, it would bury a real person in messages.
+RELAY_HEADER = "X-Relayed-By"
+RELAY_ID = "funnel-agent"
+
+
 async def _forward(url: str, raw: bytes, headers: dict) -> None:
     """Best-effort relay to a second consumer of the same callback URL."""
     try:
@@ -114,11 +123,17 @@ async def receive_webhook(request: Request, site_id: str = Depends(get_site_id))
         )
         receipts += int(updated is not None)
 
-    if settings.meta_wa_forward_url:
+    relayed_by = request.headers.get(RELAY_HEADER.lower())
+    if settings.meta_wa_forward_url and relayed_by:
+        # This came from a relay, so someone upstream already fed the chain.
+        # Forwarding it on is what closes the loop.
+        print(f"[messaging] not forwarding: already relayed by {relayed_by}")
+    elif settings.meta_wa_forward_url:
         task = asyncio.create_task(_forward(
             settings.meta_wa_forward_url, raw,
             {"Content-Type": "application/json",
-             "X-Hub-Signature-256": request.headers.get("x-hub-signature-256", "")},
+             "X-Hub-Signature-256": request.headers.get("x-hub-signature-256", ""),
+             RELAY_HEADER: RELAY_ID},
         ))
         _forward_tasks.add(task)
         task.add_done_callback(_forward_tasks.discard)
