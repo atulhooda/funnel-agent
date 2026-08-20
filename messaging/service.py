@@ -143,10 +143,14 @@ async def record_inbound(
         else:
             lead = await repo.find_lead_by_email(cur, site_id, key)
 
-        if lead is None:
+        if lead is None and get_config("guardrails", site_id).get(
+                "create_leads_from_inbound", False):
             # Someone who messages the business number IS a lead — usually a warm
             # one, since they made contact. Without this they would sit in the
             # inbox as a bare phone number: never scored, never decided on.
+            #
+            # Only when the funnel owns the number, though: on a shared one this
+            # turns every patient chasing an appointment into a marketing lead.
             #
             # Consent is deliberately NOT granted here. Writing in authorizes a
             # reply (that is what Meta's 24h window is for) but not agent-initiated

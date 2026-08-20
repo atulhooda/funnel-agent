@@ -32,6 +32,16 @@ action_channels:
   send_email: email
   send_whatsapp: whatsapp
 
+# Should a stranger who messages the business number become a lead?
+#
+# True suits a number the funnel owns outright: whoever writes in made contact,
+# so they are a warm lead. Set it FALSE when the number is shared with another
+# product — this one also runs a patient-conversation bot, and its patients
+# asking to reschedule an appointment are not leads for anything. Their message
+# is still stored and still visible in the inbox; it just does not manufacture
+# a lead, so a known lead writing in is still matched and still counted.
+create_leads_from_inbound: false
+
 # An inbound message that is EXACTLY one of these — case, spacing and trailing
 # punctuation ignored — is treated as an opt-out and silences the channel.
 # Matched whole, never as a substring: "stop losing patients to missed calls"
