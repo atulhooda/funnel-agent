@@ -253,7 +253,7 @@ async def api_leads(site_id: str = Depends(get_site_id)) -> dict:
     async with transaction() as cur:
         leads = await repo.list_leads(cur, site_id)
 
-    counts = {"real": 0, "junk": 0}
+    counts = {"real": 0, "junk": 0, "verified": 0}
     for lead in leads:
         quality, reason = classify_lead(lead, floor)
         lead["quality"] = quality
@@ -261,6 +261,11 @@ async def api_leads(site_id: str = Depends(get_site_id)) -> dict:
         # Decimal from SQL is not JSON-serializable by default.
         lead["active_seconds"] = round(float(lead.get("active_seconds") or 0), 1)
         counts[quality] += 1
+        # Verified cuts ACROSS real/junk rather than being a third quality: a
+        # lead who passed OTP proved a working number they control, whatever
+        # their browsing looked like. Counted separately so the tabs still sum.
+        if lead.get("phone_verified"):
+            counts["verified"] += 1
 
     return {
         "site_id": site_id,

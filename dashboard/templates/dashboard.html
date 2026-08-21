@@ -340,12 +340,13 @@
           <option value="name">Name</option>
           <option value="place">Place</option>
           <option value="stage">Funnel stage</option>
+          <option value="verified">Verified at</option>
         </select>
         <button class="dirbtn" id="lead-dir" onclick="toggleLeadDir()" title="Reverse order"></button>
       </span>
     </div>
     <div class="tw"><table id="leads"><thead><tr>
-      <th>Lead</th><th>Stage</th><th>Intent</th><th>Consent</th><th>Objections</th><th>Persona</th><th>Scored</th>
+      <th>Lead</th><th>Stage</th><th>Intent</th><th>Consent</th><th>Objections</th><th>Persona</th><th id="lead-last-col">Scored</th>
     </tr></thead><tbody></tbody></table></div>
     <div class="pager" id="leads-pager"></div>
   </div>
@@ -788,6 +789,7 @@
       case "intent":  return l.intent_score;
       case "time":    return l.active_seconds;
       case "created": return l.created_at ? Date.parse(l.created_at) : null;
+      case "verified": return l.phone_verified_at ? Date.parse(l.phone_verified_at) : null;
       default:        return l.last_activity ? Date.parse(l.last_activity) : null;
     }
   }
@@ -815,7 +817,7 @@
   }
 
   function renderLeadTabs(counts){
-    const tabs = [["real","Real"],["junk","Junk"],["all","All"]];
+    const tabs = [["real","Real"],["verified","Verified"],["junk","Junk"],["all","All"]];
     document.getElementById("lead-tabs").innerHTML = tabs.map(([k,label])=>
       `<button class="ltab${LEAD_FILTER===k?' on':''}" onclick="setLeadFilter('${k}')">${label}
          <span class="n">${fmtNum(counts[k]||0)}</span></button>`).join("");
@@ -847,10 +849,14 @@
     window.__LEADS = rows;
     renderLeadTabs(window.__LEAD_COUNTS || {
       real: rows.filter(l=>l.quality!=="junk").length,
+      verified: rows.filter(l=>l.phone_verified).length,
       junk: rows.filter(l=>l.quality==="junk").length,
       all:  rows.length,
     });
-    if(LEAD_FILTER !== "all") rows = rows.filter(l => (l.quality||"real") === LEAD_FILTER);
+    // Verified is not a quality — it overlaps both real and junk — so it
+    // filters on the OTP flag rather than on l.quality like the others.
+    if(LEAD_FILTER === "verified")   rows = rows.filter(l => l.phone_verified);
+    else if(LEAD_FILTER !== "all")   rows = rows.filter(l => (l.quality||"real") === LEAD_FILTER);
 
     // Stage options carry counts for the set you're actually looking at, so the
     // dropdown doubles as a breakdown.
@@ -868,6 +874,8 @@
     rows = sortLeads(rows.filter(matchesQuery));
     document.getElementById("leads-n").textContent = rows.length;
     // Keep the controls showing the state they actually describe.
+    document.getElementById("lead-last-col").textContent =
+      LEAD_FILTER === "verified" ? "Verified" : "Scored";
     document.getElementById("lead-sort").value = LEAD_SORT;
     document.getElementById("lead-dir").textContent = LEAD_DIR === "desc" ? "↓" : "↑";
     document.getElementById("lead-dir").title =
@@ -904,12 +912,13 @@
         <td><div class="consent">${cp(l.email_opt_in,'email')}${cp(l.whatsapp_opt_in,'wa')}</div></td>
         <td class="top">${chips(l.likely_objections)}</td>
         <td class="top">${persona(l.persona_signals)}</td>
-        <td class="muted num">${ts(l.scored_at)||'—'}</td>
+        <td class="muted num">${(LEAD_FILTER==="verified" ? ts(l.phone_verified_at) : ts(l.scored_at))||'—'}</td>
       </tr>`;
     }).join("") || `<tr><td class="empty" colspan="7">${
         (LEAD_STAGE || LEAD_DATE || LEAD_QUERY)
           ? `No leads match these filters.${LEAD_DATE ? ` Nobody was active on ${esc(LEAD_DATE)}.` : ""}`
       : LEAD_FILTER === "junk" ? "No junk leads — every visitor did something worth keeping."
+      : LEAD_FILTER === "verified" ? "Nobody has completed WhatsApp OTP verification yet. A lead appears here the moment they confirm their number."
       : LEAD_FILTER === "real" ? "No real leads yet — only drive-by visits so far. Check the Junk tab."
       : "No leads yet."}</td></tr>`;
   }
